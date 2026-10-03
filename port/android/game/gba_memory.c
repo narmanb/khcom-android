@@ -6,7 +6,11 @@
 _Static_assert(sizeof(GbaAddress) == 4, "GBA addresses must stay 32-bit");
 _Static_assert(sizeof(uintptr_t) >= sizeof(void*), "uintptr_t must hold a host pointer");
 
-uint8_t gGbaIo[GBA_IO_SIZE] __attribute__((aligned(64)));
+uint8_t gGbaIo[GBA_IO_SIZE] __attribute__((aligned(64))) = {
+    /* KEYINPUT is active-low and powers up with every key released. */
+    [0x130] = 0xFF,
+    [0x131] = 0x03,
+};
 uint8_t gGbaPltt[GBA_PLTT_SIZE] __attribute__((aligned(64)));
 uint8_t gGbaVram[GBA_VRAM_SIZE] __attribute__((aligned(64)));
 uint8_t gGbaOam[GBA_OAM_SIZE] __attribute__((aligned(64)));

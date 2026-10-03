@@ -86,7 +86,12 @@ static int16_t Clamp16(int value) {
 }
 
 void AndroidHostSetKeys(uint16_t keys) {
-    sKeys = keys & 0x03FFu;
+    uint16_t pressed = keys & 0x03FFu;
+
+    sKeys = pressed;
+    /* Let UpdateKeyState() see host input immediately instead of waiting for
+     * the following PortVBlankWait() to refresh KEYINPUT. */
+    *(volatile uint16_t*)&gGbaIo[0x130] = (uint16_t)(~pressed) & 0x03FFu;
 }
 
 void AndroidHostSetPaused(int paused) {
