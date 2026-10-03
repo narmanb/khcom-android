@@ -33,6 +33,14 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        if (NativeBridge.isStarted()) {
+            NativeBridge.flushSave();
+        }
+        super.onPause();
+    }
+
+    @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {

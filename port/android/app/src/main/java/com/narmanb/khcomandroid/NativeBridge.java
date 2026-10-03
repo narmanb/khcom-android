@@ -15,6 +15,7 @@ final class NativeBridge {
     static native int frameCounter();
     static native void setKeys(int keys);
     static native boolean isStarted();
+    static native void flushSave();
 
     static ByteBuffer nativeOrderFrameBuffer() {
         ByteBuffer buffer = frameBuffer();

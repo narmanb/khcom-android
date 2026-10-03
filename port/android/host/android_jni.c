@@ -48,6 +48,12 @@ Java_com_narmanb_khcomandroid_NativeBridge_start(
     }
 
     error[0] = '\0';
+    if (!AndroidHostInitSram(path, error, sizeof(error))) {
+        (*env)->ReleaseByteArrayElements(env, mapBytes, map, JNI_ABORT);
+        (*env)->ReleaseStringUTFChars(env, romPath, path);
+        return (*env)->NewStringUTF(
+            env, error[0] != '\0' ? error : "Could not initialize save data");
+    }
     if (!AndroidRomLoad(path, map, (size_t)mapSize, error, sizeof(error))) {
         (*env)->ReleaseByteArrayElements(env, mapBytes, map, JNI_ABORT);
         (*env)->ReleaseStringUTFChars(env, romPath, path);
@@ -99,4 +105,12 @@ Java_com_narmanb_khcomandroid_NativeBridge_isStarted(
     (void)env;
     (void)clazz;
     return sStarted ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_narmanb_khcomandroid_NativeBridge_flushSave(
+    JNIEnv* env, jclass clazz) {
+    (void)env;
+    (void)clazz;
+    AndroidHostFlushSram();
 }

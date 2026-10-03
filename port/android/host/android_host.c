@@ -18,6 +18,7 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdio.h>
 
 #define LOG_TAG "KHCOM"
 #define FRAME_NS 16666667LL
@@ -28,6 +29,11 @@ static PpuFrame sFrame;
 static uint32_t sRgba[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
 static volatile uint16_t sKeys;
 static volatile uint32_t sFrameCounter;
+
+static char sSavePath[1024];
+static char sSaveTmpPath[1032];
+static int sSramDirty;
+static int sSramFlushFrames;
 
 static int16_t sAudioScratch[MAX_AUDIO_SAMPLES * 2];
 
@@ -70,6 +76,82 @@ void AndroidHostSetKeys(uint16_t keys) {
     sKeys = keys & 0x03FFu;
 }
 
+int AndroidHostInitSram(const char* romPath, char* error, unsigned errorSize) {
+    const char* slash;
+    FILE* fp;
+    size_t dirLen;
+    size_t got;
+
+    if (romPath == NULL) {
+        if (error && errorSize) snprintf(error, errorSize, "ROM path is missing");
+        return 0;
+    }
+
+    slash = strrchr(romPath, '/');
+    dirLen = slash != NULL ? (size_t)(slash - romPath) : 0;
+    if (dirLen + sizeof("/khcom.sav") >= sizeof(sSavePath)) {
+        if (error && errorSize) snprintf(error, errorSize, "save path is too long");
+        return 0;
+    }
+
+    if (dirLen != 0) {
+        memcpy(sSavePath, romPath, dirLen);
+    }
+    sSavePath[dirLen] = '\0';
+    snprintf(sSavePath + dirLen, sizeof(sSavePath) - dirLen, "/khcom.sav");
+    snprintf(sSaveTmpPath, sizeof(sSaveTmpPath), "%s.tmp", sSavePath);
+
+    memset(gGbaSram, 0xFF, sizeof(gGbaSram));
+    fp = fopen(sSavePath, "rb");
+    if (fp == NULL) {
+        return 1;
+    }
+
+    got = fread(gGbaSram, 1, sizeof(gGbaSram), fp);
+    fclose(fp);
+    if (got != sizeof(gGbaSram)) {
+        memset(gGbaSram, 0xFF, sizeof(gGbaSram));
+        if (error && errorSize) snprintf(error, errorSize, "existing khcom.sav is not 64 KiB");
+        return 0;
+    }
+    return 1;
+}
+
+void AndroidHostFlushSram(void) {
+    FILE* fp;
+    size_t wrote;
+
+    if (!sSramDirty || sSavePath[0] == '\0') {
+        return;
+    }
+
+    fp = fopen(sSaveTmpPath, "wb");
+    if (fp == NULL) {
+        PortLog("save: cannot open temporary save");
+        return;
+    }
+
+    wrote = fwrite(gGbaSram, 1, sizeof(gGbaSram), fp);
+    fflush(fp);
+    fsync(fileno(fp));
+    fclose(fp);
+
+    if (wrote != sizeof(gGbaSram)) {
+        unlink(sSaveTmpPath);
+        PortLog("save: incomplete write");
+        return;
+    }
+
+    if (rename(sSaveTmpPath, sSavePath) != 0) {
+        unlink(sSaveTmpPath);
+        PortLog("save: rename failed");
+        return;
+    }
+
+    sSramDirty = 0;
+    sSramFlushFrames = 0;
+}
+
 const uint32_t* AndroidHostGetFrame(void) {
     return sRgba;
 }
@@ -105,6 +187,10 @@ void PortVBlankWait(void) {
         sNextFrameNs += FRAME_NS;
     }
     SleepUntil(sNextFrameNs);
+
+    if (sSramDirty && sSramFlushFrames > 0 && --sSramFlushFrames == 0) {
+        AndroidHostFlushSram();
+    }
 }
 
 uint16_t PortReadKeys(void) {
@@ -112,8 +198,8 @@ uint16_t PortReadKeys(void) {
 }
 
 void PortSramWritten(void) {
-    /* Persistence is wired in the Android lifecycle layer; SRAM already lives
-     * in gGbaSram, so native game behavior is correct before disk flushing is added. */
+    sSramDirty = 1;
+    sSramFlushFrames = 10;
 }
 
 void PortAudioPush(const int8_t* right, const int8_t* left, int samples, int rate) {
@@ -130,11 +216,11 @@ void PortAudioPush(const int8_t* right, const int8_t* left, int samples, int rat
     PsgRender(sAudioScratch, samples, rate);
 
     for (i = 0; i < samples; i++) {
-        int r = ((int)right[i] << 6) + sAudioScratch[i * 2];
-        int l = ((int)left[i] << 6) + sAudioScratch[i * 2 + 1];
+        int l = ((int)left[i] << 6) + sAudioScratch[i * 2];
+        int r = ((int)right[i] << 6) + sAudioScratch[i * 2 + 1];
 
-        sAudioScratch[i * 2] = Clamp16(r);
-        sAudioScratch[i * 2 + 1] = Clamp16(l);
+        sAudioScratch[i * 2] = Clamp16(l);
+        sAudioScratch[i * 2 + 1] = Clamp16(r);
     }
 
     /*
