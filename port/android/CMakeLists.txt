@@ -10,6 +10,7 @@ if(ANDROID AND NOT ANDROID_ABI STREQUAL "armeabi-v7a")
 endif()
 
 add_library(khcom_android_platform STATIC
+    game/abi_probe.c
     game/gba_memory.c
     game/gba_system.c
     host/android_rom.c
@@ -33,6 +34,7 @@ target_compile_definitions(khcom_android_platform PUBLIC
 target_compile_features(khcom_android_platform PRIVATE c_std_11)
 
 target_compile_options(khcom_android_platform PRIVATE
+    -include ${CMAKE_CURRENT_SOURCE_DIR}/include/android_game_abi.h
     -Wall
     -Wextra
     -Wpedantic

@@ -451,6 +451,7 @@ def main():
     ]
     game_cflags = (
         GAME_CFLAGS
+        + ["-include", "port/android/include/android_game_abi.h"]
         + defines
         + [f"-I{path}" for path in include_dirs]
         + [f"-I{gba_build}/gen", "-Iport/android/include"]
