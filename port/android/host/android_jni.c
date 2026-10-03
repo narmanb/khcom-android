@@ -140,3 +140,11 @@ Java_com_narmanb_khcomandroid_NativeBridge_readAudio(
     (*env)->ReleaseShortArrayElements(env, output, samples, 0);
     return done;
 }
+
+JNIEXPORT void JNICALL
+Java_com_narmanb_khcomandroid_NativeBridge_setPaused(
+    JNIEnv* env, jclass clazz, jboolean paused) {
+    (void)env;
+    (void)clazz;
+    AndroidHostSetPaused(paused == JNI_TRUE);
+}

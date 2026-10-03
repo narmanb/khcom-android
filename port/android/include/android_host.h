@@ -5,6 +5,7 @@
 
 /* GBA key bits, active high. */
 void AndroidHostSetKeys(uint16_t keys);
+void AndroidHostSetPaused(int paused);
 
 /* Save file lives beside the private ROM copy. */
 int AndroidHostInitSram(const char* romPath, char* error, unsigned errorSize);

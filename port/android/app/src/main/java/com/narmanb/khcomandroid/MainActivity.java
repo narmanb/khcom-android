@@ -37,6 +37,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onPause() {
         if (NativeBridge.isStarted()) {
+            NativeBridge.setPaused(true);
             NativeBridge.flushSave();
         }
         if (audioPlayer != null) {
@@ -48,6 +49,9 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (NativeBridge.isStarted()) {
+            NativeBridge.setPaused(false);
+        }
         if (audioPlayer != null) {
             audioPlayer.resume();
         }

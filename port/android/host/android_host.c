@@ -19,6 +19,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <pthread.h>
 
 #define LOG_TAG "KHCOM"
 #define FRAME_NS 16666667LL
@@ -32,6 +33,11 @@ static PpuFrame sFrame;
 static uint32_t sRgba[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
 static volatile uint16_t sKeys;
 static volatile uint32_t sFrameCounter;
+
+static pthread_mutex_t sPauseMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t sPauseCond = PTHREAD_COND_INITIALIZER;
+static int sPaused;
+static int sPauseAcknowledged;
 
 static char sSavePath[1024];
 static char sSaveTmpPath[1032];
@@ -81,6 +87,28 @@ static int16_t Clamp16(int value) {
 
 void AndroidHostSetKeys(uint16_t keys) {
     sKeys = keys & 0x03FFu;
+}
+
+void AndroidHostSetPaused(int paused) {
+    pthread_mutex_lock(&sPauseMutex);
+    sPaused = paused != 0;
+
+    if (sPaused) {
+        /*
+         * Wait until the game thread reaches the VBlank boundary. This makes
+         * a save flush from Activity.onPause deterministic instead of racing
+         * a game update that is still writing SRAM.
+         */
+        while (!sPauseAcknowledged) {
+            pthread_cond_wait(&sPauseCond, &sPauseMutex);
+        }
+    } else {
+        sPauseAcknowledged = 0;
+        sNextFrameNs = 0;
+        pthread_cond_broadcast(&sPauseCond);
+    }
+
+    pthread_mutex_unlock(&sPauseMutex);
 }
 
 int AndroidHostInitSram(const char* romPath, char* error, unsigned errorSize) {
@@ -182,6 +210,14 @@ void PortCaptureSubmit(void) {
 
 void PortVBlankWait(void) {
     int64_t now;
+
+    pthread_mutex_lock(&sPauseMutex);
+    while (sPaused) {
+        sPauseAcknowledged = 1;
+        pthread_cond_broadcast(&sPauseCond);
+        pthread_cond_wait(&sPauseCond, &sPauseMutex);
+    }
+    pthread_mutex_unlock(&sPauseMutex);
 
     PpuSetOutput(sRgba, GBA_SCREEN_WIDTH, GBA_SCREEN_WIDTH);
     PpuRenderFrame(&sFrame);
