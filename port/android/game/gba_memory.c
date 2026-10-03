@@ -87,7 +87,7 @@ void* AndroidGbaPointerToHost(const void* pointer) {
     }
 
     mapped = AndroidGbaAddressToHost((GbaAddress)raw);
-    return mapped != NULL ? mapped : (void*)pointer;
+    return mapped;
 }
 
 int AndroidGbaPointerIsBusAddress(const void* pointer) {

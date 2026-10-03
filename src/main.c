@@ -23,6 +23,16 @@
 #include "gba/macro.h"
 #include "types.h"
 
+#ifdef PLATFORM_ANDROID
+/*
+ * The native Android IRQ shim dispatches gIntrTable directly instead of
+ * installing a vector at the GBA IWRAM address 0x03007FFC.
+ */
+static void* sIntrVector;
+#undef INTR_VECTOR
+#define INTR_VECTOR sIntrVector
+#endif
+
 vu16 gFrameSyncFlags;
 u16 gVBlankEndVCount;
 u32 gUnk_03006C04[3];
@@ -97,8 +107,10 @@ void DisableHBlankIntr() {
 void ClearSystemMemory() {
     RegisterRamReset(RESET_ALL);
     REG_WAITCNT = WAITCNT_SRAM_2 | WAITCNT_WS0_N_3 | WAITCNT_WS0_S_1 | WAITCNT_WS1_N_3 | WAITCNT_WS1_S_1 | WAITCNT_WS2_N_3 | WAITCNT_WS2_S_1 | WAITCNT_PREFETCH_ENABLE;
+#ifndef PLATFORM_ANDROID
     CpuFill32(0, (void*)EWRAM_START, EWRAM_SIZE);
     CpuFill32(0, (void*)IWRAM_START, IWRAM_SIZE - 0x200);
+#endif
     CpuFill32(0, (void*)VRAM, VRAM_SIZE);
 }
 #endif
@@ -117,8 +129,11 @@ void InitSystem() {
 #else
     RegisterRamReset(RESET_ALL);
     REG_WAITCNT = WAITCNT_SRAM_2 | WAITCNT_WS0_N_3 | WAITCNT_WS0_S_1 | WAITCNT_WS1_N_3 | WAITCNT_WS1_S_1 | WAITCNT_WS2_N_3 | WAITCNT_WS2_S_1 | WAITCNT_PREFETCH_ENABLE;
+#ifndef PLATFORM_ANDROID
+    /* Android work RAM is backed by zero-initialized native arrays. */
     DmaFill32(3, 0, EWRAM_START, EWRAM_SIZE);
     DmaFill32(3, 0, IWRAM_START, IWRAM_SIZE - 0x200);
+#endif
 #endif
     gVBlankEndVCount = 0;
     gFrameSyncFlags = 0;
@@ -127,7 +142,9 @@ void InitSystem() {
     gLanguage = LANGUAGE_ENGLISH;
 #endif
     REG_IME = 0;
+#ifndef PLATFORM_ANDROID
     DmaCopy32(3, IrqHandler, gIntrHandler, sizeof(gIntrHandler));
+#endif
     INTR_VECTOR = gIntrHandler;
     REG_IE = INTR_FLAG_GAMEPAK;
     REG_IF = INTR_FLAG_GAMEPAK;
