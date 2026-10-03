@@ -559,7 +559,12 @@ void task_btl_riku_0(BtlRikuWork* work, BtlTaskArg* arg) {
     e->vx = e->vy = 0;
 
     // @bug arg is NULL in normal battles (NULL read).
+#ifdef PLATFORM_ANDROID
+    /* GBA BIOS/open-bus data makes this path act non-zero on a NULL arg. */
+    if (arg == NULL || arg->mainSide != 0) {
+#else
     if (arg->mainSide != 0) {
+#endif
         ColliderInit(&e->collider, 1, e->radiusX, e->height);
     } else {
         ColliderInit(&e->collider, 2, e->radiusX, e->height);
