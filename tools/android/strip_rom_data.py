@@ -315,6 +315,7 @@ def main():
         )
 
     Path(args.out_library).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.rommap).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out_library).write_bytes(data)
 
     header = MAGIC + struct.pack(

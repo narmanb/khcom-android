@@ -355,6 +355,9 @@ def main():
 
     out_dir = Path(f"build/android/{version}")
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Ninja does not create parent directories for arbitrary outputs.
+    for subdir in ("gen", "src", "asm", "aligned", "port_game", "port_host"):
+        (out_dir / subdir).mkdir(parents=True, exist_ok=True)
 
     symbols = parse_symbols(version)
     regional_plan = load_sidecars("config")["regions"][version]
@@ -654,6 +657,8 @@ def main():
         package_dir = out_dir / "package"
         jni_dir = package_dir / "jniLibs" / "armeabi-v7a"
         asset_dir = package_dir / "assets"
+        jni_dir.mkdir(parents=True, exist_ok=True)
+        asset_dir.mkdir(parents=True, exist_ok=True)
         stripped = str(jni_dir / "libkhcom.so")
         rommap = str(asset_dir / "rommap.bin")
         n.build(
