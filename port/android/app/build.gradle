@@ -1,0 +1,32 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.narmanb.khcomandroid"
+    compileSdk 37
+
+    defaultConfig {
+        applicationId "com.narmanb.khcomandroid"
+        minSdk 23
+        targetSdk 36
+        versionCode 1
+        versionName "0.0.1"
+
+        ndk {
+            abiFilters "armeabi-v7a"
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs += [rootProject.file("../../build/android/us/package/jniLibs")]
+            assets.srcDirs += [rootProject.file("../../build/android/us/package/assets")]
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

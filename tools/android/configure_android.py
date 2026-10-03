@@ -652,8 +652,10 @@ def main():
         n.build(unstripped, "link", objs)
 
         package_dir = out_dir / "package"
-        stripped = str(package_dir / "libkhcom.so")
-        rommap = str(package_dir / "rommap.bin")
+        jni_dir = package_dir / "jniLibs" / "armeabi-v7a"
+        asset_dir = package_dir / "assets"
+        stripped = str(jni_dir / "libkhcom.so")
+        rommap = str(asset_dir / "rommap.bin")
         n.build(
             stripped,
             "strip_rom",
