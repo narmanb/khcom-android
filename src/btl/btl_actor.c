@@ -481,7 +481,11 @@ u8 HumChooseCardAction(HumWork* work, u16 interval, u16 offset, u16 width, u16 d
         }
 
         // @bug unk_184 is NULL for humanoid bosses without a card table (NULL read).
+#ifdef PLATFORM_ANDROID
+        if (value == 0 || work->stockMoves == NULL || work->stockMoves[cards] != id) {
+#else
         if (value == 0 || work->stockMoves[cards] != id) {
+#endif
             gBtlWork->rikuKeys |= RIKU_KEY_NEXT_CARD;
         } else {
             gBtlWork->rikuKeys |= RIKU_KEY_STOCK;

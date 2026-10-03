@@ -516,6 +516,9 @@ static void cardbattle_0(CardBattleWork* w) {
 
     CpuFill32(0, w, sizeof(CardBattleWork));
     // @bug gCardBattleState is only allocated further down (NULL write).
+#ifdef PLATFORM_ANDROID
+    if (gCardBattleState != NULL)
+#endif
     gCardBattleState->soraWork = w;
     gBtlWork->hcEffect = 0;
     ResetBossCardValue();
@@ -3333,6 +3336,12 @@ void ClearStockedCardSlots(CardBattleWork* w) {
 
     for (i = 0; i < 4; i++) {
         c = w->slots[i];
+#ifdef PLATFORM_ANDROID
+        /* Empty slots write through NULL into the BIOS region on GBA. */
+        if (c == NULL) {
+            continue;
+        }
+#endif
 
         // @bug? Should be slotCounts[i].
         for (j = 0; j < w->slotCounts[j]; j++) {
@@ -5439,6 +5448,14 @@ void UpdateSoraReloadGauge(CardDisplayWork* p) {
 }
 
 void UpdateSoraCardValue(CardDisplayWork* w) {
+#ifdef PLATFORM_ANDROID
+    static CardDef sNoCardDef;
+    const CardDef* savedDef = w->cardDef;
+
+    if (savedDef == NULL) {
+        w->cardDef = &sNoCardDef;
+    }
+#endif
     // @bug A "not have" display has no cardDef (NULL read).
     if (gBtlWork->hcEffect == 16) {
         if (w->flags & CARD_DISP_FLAG_SELECTED) {
@@ -5504,6 +5521,9 @@ void UpdateSoraCardValue(CardDisplayWork* w) {
             break;
         }
     }
+#ifdef PLATFORM_ANDROID
+    w->cardDef = savedDef;
+#endif
 }
 
 void TickSoraHcEffectOnPlayEnd() {

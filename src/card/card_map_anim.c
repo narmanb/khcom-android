@@ -32,7 +32,14 @@ u16 gCardCount EWRAM_COMMON(4);
 void map_anim_0(MapTileAnimationWork* p) {
     u8 i;
 
+#ifdef PLATFORM_ANDROID
+    /* Out-of-range entries read zeroed/open-bus-adjacent data on GBA. */
+    p->definition = (u32)gEventState->mapAnim < 6
+        ? gMapTileAnimationDefs[gEventState->mapAnim]
+        : NULL;
+#else
     p->definition = gMapTileAnimationDefs[gEventState->mapAnim];
+#endif
 
     if (p->definition != NULL) {
         for (i = 0; i < p->definition->trackCount; i++) {

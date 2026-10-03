@@ -318,7 +318,11 @@ u8 EnemyCardFlyOff(CardDisplayWork* p) {
     return 1;
 }
 
+#ifdef PLATFORM_ANDROID
+u8 func_08090A54(CardDisplayWork* p, void* a) {
+#else
 void func_08090A54(CardDisplayWork* p, void* a) {
+#endif
     p->x -= gSineTable[p->spinSpeed] * 3;
     UpdateCardDisplayFlip(p);
 
@@ -334,9 +338,16 @@ void func_08090A54(CardDisplayWork* p, void* a) {
         p->flags &= ~CARD_DISP_FLAG_SETTLED;
         SetTaskUpdate(a, (TaskUpdateFunc)EnemyCardClosed);
     }
+#ifdef PLATFORM_ANDROID
+    return 1;
+#endif
 }
 
+#ifdef PLATFORM_ANDROID
+u8 func_08090ACC(CardDisplayWork* p, void* a) {
+#else
 void func_08090ACC(CardDisplayWork* p, void* a) {
+#endif
     p->x += gSineTable[p->spinSpeed] * 3;
     UpdateCardDisplayFlip(p);
 
@@ -353,6 +364,9 @@ void func_08090ACC(CardDisplayWork* p, void* a) {
         p->flags &= ~CARD_DISP_FLAG_SETTLED;
         SetTaskUpdate(a, (TaskUpdateFunc)EnemyCardClosed);
     }
+#ifdef PLATFORM_ANDROID
+    return 1;
+#endif
 }
 
 void DispatchEnemyCardCommand(CardDisplayWork* p, void* a) {

@@ -1712,7 +1712,11 @@ u8 FlipBossCard(BossCardWork* w, u8 b);
 void AimPrizeMapCardAtCenter(PrizeMapCardWork* w);
 void AimBossPrizeAtCenter(BossPrizeWork* w);
 u8 StockInfo_1(StockInfoWork* w, void* a);
+#ifdef PLATFORM_ANDROID
+u8 func_08090A54(CardDisplayWork* p, void* a);
+#else
 void func_08090A54(CardDisplayWork* p, void* a);
+#endif
 u8 UpdateMapSelectValueTutorial(MapSelectWork* w, void* a);
 void LoadRikuDeckNameTexts(RikuDeckMenuWork* w);
 void LoadDeckExchangeDeckNameTexts(DeckExchangeWork* w);
@@ -1730,7 +1734,11 @@ void SetDeckExchangeFrameCursor(DeckExchangeWork* w, u8 kind);
 u8 UpdateDeckMenuCloseKeyboard(DeckMenuWork* w, void* a);
 void OpenRikuCards(CardBattleWork* w);
 void InitDecks();
+#ifdef PLATFORM_ANDROID
+u8 func_08090ACC(CardDisplayWork* p, void* a);
+#else
 void func_08090ACC(CardDisplayWork* p, void* a);
+#endif
 u8 UpdateMapcardMoveBack(MapcardWork* w, void* a);
 void SpotLight_0(SpotlightWork* w, u8* src);
 u8 UpdateRevCountHidden(RevCountWork* w, void* a);

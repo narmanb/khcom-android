@@ -299,7 +299,26 @@ s32 ResolveLinkActiveCardsMove(s32* out, s32 b) {
 #endif
         gCardBattleState->stockMoveCount = 1;
 
-        if ((gGameState.flags & GAME_FLAG_RIKU) && gBtlWork->soraOwnsPlay != 0 && !(gBtlWork->flags & BTL_FLAG_DARK_MODE)) {
+    #ifdef PLATFORM_ANDROID
+    /*
+     * Native processes cannot read through empty stack slots. The GBA sees
+     * BIOS/open-bus garbage there, which never matches a valid sleight.
+     */
+    {
+        static CardDef sNoCardDef;
+        static CardDisplayWork sNoCard;
+        static CardDisplayWork* sStack[3];
+
+        memset(&sNoCardDef, 0xFF, sizeof(sNoCardDef));
+        sNoCard.cardDef = &sNoCardDef;
+        for (i = 0; i < 3; i++) {
+            sStack[i] = (i < count && cards[i] != NULL) ? cards[i] : &sNoCard;
+        }
+        cards = sStack;
+    }
+#endif
+
+    if ((gGameState.flags & GAME_FLAG_RIKU) && gBtlWork->soraOwnsPlay != 0 && !(gBtlWork->flags & BTL_FLAG_DARK_MODE)) {
             if (gCardBattleState->darkModeReady == 1 || gBtlWork->darkPoints > 29) {
                 gCardBattleState->darkModeReady = 0;
                 return 46;
@@ -756,6 +775,25 @@ s32 LookupStockName(CardDisplayWork** cards, u8 count, u8 kind, UnkStruct_080ABA
     for (i = 0; i < count; i++) {
         v[i] = (*(i + cards))->cardDef->catalogNumber;
     }
+
+#ifdef PLATFORM_ANDROID
+    /*
+     * Native processes cannot read through empty stack slots. The GBA sees
+     * BIOS/open-bus garbage there, which never matches a valid sleight.
+     */
+    {
+        static CardDef sNoCardDef;
+        static CardDisplayWork sNoCard;
+        static CardDisplayWork* sStack[3];
+
+        memset(&sNoCardDef, 0xFF, sizeof(sNoCardDef));
+        sNoCard.cardDef = &sNoCardDef;
+        for (i = 0; i < 3; i++) {
+            sStack[i] = (i < count && cards[i] != NULL) ? cards[i] : &sNoCard;
+        }
+        cards = sStack;
+    }
+#endif
 
     if ((gGameState.flags & GAME_FLAG_RIKU) && gBtlWork->soraOwnsPlay != 0 && !(gBtlWork->flags & BTL_FLAG_DARK_MODE)) {
         if (gCardBattleState->darkModeReady == 1 || gBtlWork->darkPoints > 29) {
