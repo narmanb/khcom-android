@@ -277,6 +277,10 @@ static s32 Continue_1(ContinueWork* p) {
     t = sContinueCursorY;
     p->y += (t[p->cursor] - p->y) >> 3;
     p->unk_64 += 4;
+#ifdef PLATFORM_ANDROID
+    /* agbcc left r0 non-zero when this task update fell off the end. */
+    return 1;
+#endif
 }
 
 static void Continue_2(ContinueWork* p) {

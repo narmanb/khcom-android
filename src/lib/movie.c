@@ -1,6 +1,10 @@
+#include "gba/hwaddr.h"
 #include "macros.h"
 #include "snd_stream.h"
 #include "movie.h"
+#ifdef PLATFORM_ANDROID
+#include "gba/syscall.h"
+#endif
 #include "gba/defines.h"
 #include "gba/io_reg.h"
 #include <stddef.h>
@@ -93,6 +97,10 @@ void MoviePlay(s32 (*a)(s32), s32 b) {
 
     while (1) {
         while (MovieSyncFrame(gMoviePlayer) == 0) {
+#ifdef PLATFORM_ANDROID
+            /* The native movie clock advances with the emulated VBlank. */
+            VBlankIntrWait();
+#endif
         }
 
         MovieDrawFrame(gMoviePlayer, (u16*)VRAM + (y * 240 + x));

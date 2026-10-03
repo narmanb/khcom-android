@@ -111,6 +111,11 @@ uint16_t PortReadKeys(void) {
     return sKeys;
 }
 
+void PortSramWritten(void) {
+    /* Persistence is wired in the Android lifecycle layer; SRAM already lives
+     * in gGbaSram, so native game behavior is correct before disk flushing is added. */
+}
+
 void PortAudioPush(const int8_t* right, const int8_t* left, int samples, int rate) {
     int i;
 

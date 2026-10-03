@@ -1,5 +1,8 @@
 #include "macros.h"
 #include "gba/io_reg.h"
+#ifdef PLATFORM_ANDROID
+#include "port.h"
+#endif
 #include "types.h"
 
 static const char sSramVersion[] = "SRAM_F_V103";
@@ -22,6 +25,9 @@ void WriteSramFast(const u8* src, u8* dest, u32 size) {
 
     while (--size != -1)
         *dest++ = *src++;
+#ifdef PLATFORM_ANDROID
+    PortSramWritten();
+#endif
 }
 
 u32 VerifySramFast_Core(const u8* src, u8* dest, u32 size) {
@@ -35,7 +41,15 @@ u32 VerifySramFast_Core(const u8* src, u8* dest, u32 size) {
     return 0;
 }
 
-void SetSramFastFunc() {
+#ifdef PLATFORM_ANDROID
+void SetSramFastFunc(void) {
+    /* Native Android executes these functions directly; copying Thumb code
+     * into data RAM would make it non-executable. */
+    ReadSramFast = ReadSramFast_Core;
+    VerifySramFast = VerifySramFast_Core;
+}
+#else
+void SetSramFastFunc(void) {
     u16* src;
     u16* dest;
     u16 size;
@@ -66,6 +80,8 @@ void SetSramFastFunc() {
 
     REG_WAITCNT = (REG_WAITCNT & ~WAITCNT_SRAM_MASK) | WAITCNT_SRAM_8;
 }
+
+#endif
 
 u32 WriteAndVerifySramFast(const u8* src, u8* dest, u32 size) {
     u8 i;

@@ -5,6 +5,15 @@
 #include <stddef.h>
 #include "types.h"
 
+#ifdef PLATFORM_ANDROID
+#include "port.h"
+#define MOVIE_CODE_ALLOC(size) PortCodeAlloc(size)
+#define MOVIE_CODE_FREE(p) PortCodeFree(p)
+#else
+#define MOVIE_CODE_ALLOC(size) gMovieHeap.iwramAlloc(size)
+#define MOVIE_CODE_FREE(p) gMovieHeap.iwramFree(p)
+#endif
+
 static const u8 sMovieVideoCodecConstantsSrc[96] = {
     0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5,
     5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10,
@@ -44,12 +53,12 @@ void MovieSetupVideoCodec(MoviePlayer* p, void* a, void* b, void* c, s32 w, s32 
 
     size1 = MovieVideoCodecEnd - MovieVideoCodecStart;
     size2 = MovieAudioCodecStart - MovieDeltaCodecStart;
-    p->videoCodecCode = gMovieHeap.iwramAlloc(size1);
+    p->videoCodecCode = MOVIE_CODE_ALLOC(size1);
     memcpy(p->videoCodecCode, MovieVideoCodecStart, size1);
     *(void**)a = (u8*)p->videoCodecCode - (MovieVideoCodecStart - MovieVideoCodecKeyFrame);
     *(void**)b = (u8*)p->videoCodecCode - (MovieVideoCodecStart - MovieVideoCodecPostProcess);
     memcpy((u8*)p->videoCodecCode - (MovieVideoCodecStart - MovieVideoCodecConstants), sMovieVideoCodecConstantsSrc, 96);
-    p->deltaCodecCode = gMovieHeap.iwramAlloc(size2);
+    p->deltaCodecCode = MOVIE_CODE_ALLOC(size2);
     memcpy(p->deltaCodecCode, MovieDeltaCodecStart, size2);
     *(void**)c = (u8*)p->deltaCodecCode - (MovieDeltaCodecStart - MovieDeltaCodecDecode);
     table = (s32*)((u8*)p->deltaCodecCode - (MovieDeltaCodecStart - MovieDeltaCodecOffsets));
@@ -164,7 +173,7 @@ void MovieSetupAudioCodec(MoviePlayer* p, void* a, s32 b) {
     u32 pad;
 
     size = MovieAudioCodecEnd - MovieAudioCodecStart;
-    p->audioCodecCode = gMovieHeap.iwramAlloc(size);
+    p->audioCodecCode = MOVIE_CODE_ALLOC(size);
     memcpy(p->audioCodecCode, MovieAudioCodecStart, size);
 
     switch (b) {
@@ -244,6 +253,9 @@ MoviePlayer* MovieOpen(void* a) {
         return NULL;
     }
 
+#ifdef PLATFORM_ANDROID
+    PortCodeBeginWrite();
+#endif
     MovieSetupVideoCodec(p, &p->decodeKeyFrame, &p->postProcessFrame, &p->decodeDeltaFrame, p->width, p->height);
     p->frameBuf = gMovieHeap.ewramAlloc(p->width * p->height * 2);
     p->workBuf = gMovieHeap.ewramAlloc(p->width * p->height * 2);
@@ -267,6 +279,9 @@ MoviePlayer* MovieOpen(void* a) {
         p->audioBuf = gMovieHeap.ewramAlloc(0x2000);
         MovieSetupAudioCodec(p, &p->decodeAudio, p->audioCodecId);
     }
+#ifdef PLATFORM_ANDROID
+    PortCodeEndWrite();
+#endif
 
     p->decodeBuf = gMovieHeap.iwramAlloc(v1 > v2 ? v1 : v2);
     p->frameIndex = 0;
@@ -279,9 +294,9 @@ MoviePlayer* MovieOpen(void* a) {
 void MovieFree(MoviePlayer* a) {
     MoviePlayer* p = a;
 
-    gMovieHeap.iwramFree(p->videoCodecCode);
-    gMovieHeap.iwramFree(p->deltaCodecCode);
-    gMovieHeap.iwramFree(p->audioCodecCode);
+    MOVIE_CODE_FREE(p->videoCodecCode);
+    MOVIE_CODE_FREE(p->deltaCodecCode);
+    MOVIE_CODE_FREE(p->audioCodecCode);
     gMovieHeap.ewramFree(p->frameBuf);
     gMovieHeap.ewramFree(p->workBuf);
 

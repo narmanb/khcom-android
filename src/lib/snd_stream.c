@@ -3,6 +3,9 @@
 #include "types.h"
 #include "snd_stream.h"
 #include "gba/io_reg.h"
+#ifdef PLATFORM_ANDROID
+#include "port.h"
+#endif
 #include <stddef.h>
 
 SoundStream gSndStream EWRAM_COMMON(16);
@@ -27,8 +30,18 @@ void SndStreamInit(u32 rate, u32 channels) {
     gSndStream.playedTotal = 0;
 
     for (i = 0; i < channels; i++) {
+#ifdef PLATFORM_ANDROID
+        /*
+         * CpuFastSet copies complete 32-byte blocks. The original ring can
+         * overrun by up to 28 bytes at its end; on GBA that corrupts ignored
+         * low-level heap metadata, while native Android would later crash.
+         */
+        gSndStream.buffers[i] =
+            gSndStream.alloc(((gSndStream.bufferSize + 3) & ~3) + 32);
+#else
         gSndStream.buffers[i] =
             gSndStream.alloc((gSndStream.bufferSize + 3) & ~3);
+#endif
         memset(gSndStream.buffers[i], 0, gSndStream.bufferSize);
         gSndStream.writePos[i] = 0;
         gSndStream.totalWritten[i] = 0;
@@ -56,6 +69,15 @@ void SndStreamInit(u32 rate, u32 channels) {
 
 void SndStreamUpdate() {
     if (gSndStream.playing != 0) {
+#ifdef PLATFORM_ANDROID
+        {
+            const s8* right = (const s8*)gSndStream.buffers[0] + gSndStream.dmaOffset;
+            const s8* left = gSndStream.channels == 1
+                ? right
+                : (const s8*)gSndStream.buffers[1] + gSndStream.dmaOffset;
+            PortAudioPush(right, left, gSndStream.samplesPerFrame, gSndStream.sampleRate);
+        }
+#endif
         gSndStream.dmaOffset += gSndStream.samplesPerFrame;
 
         if (gSndStream.dmaOffset == gSndStream.bufferSize) {

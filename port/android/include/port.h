@@ -14,6 +14,7 @@ extern uint8_t gGbaOam[0x400];
 extern uint8_t gGbaSram[0x10000];
 
 void PortAudioPush(const int8_t* right, const int8_t* left, int samples, int rate);
+void PortSramWritten(void);
 void PsgNewNotes(unsigned mask);
 void* PortCodeAlloc(uint32_t size);
 void PortCodeFree(void* p);

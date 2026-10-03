@@ -27,6 +27,18 @@ static MusicPlayerTrack sMPlayTracks23[1];
 static MusicPlayerTrack sMPlayTracks24[2];
 static MusicPlayerTrack sMPlayTracks25[2];
 
+#ifdef PLATFORM_ANDROID
+/*
+ * The GBA's unused slots are NULL and its low-address writes are harmless.
+ * A native process cannot dereference NULL, so route them to a never-opened
+ * player whose ident never passes the m4a checks.
+ */
+static MusicPlayerInfo sMPlayInfoUnused;
+#define UNUSED_PLAYER &sMPlayInfoUnused
+#else
+#define UNUSED_PLAYER NULL
+#endif
+
 const MusicPlayer gMPlayTable[26] = {
     {&gMPlayInfo_BGM, sMPlayTracks0, 14, 0},
     {&gMPlayInfo1, sMPlayTracks1, 1, 0},
@@ -41,9 +53,9 @@ const MusicPlayer gMPlayTable[26] = {
     {&gMPlayInfo10, sMPlayTracks10, 3, 0},
     {&gMPlayInfo11, sMPlayTracks11, 1, 0},
     {&gMPlayInfo12, sMPlayTracks12, 1, 0},
-    {NULL, NULL, 0, 0},
-    {NULL, NULL, 0, 0},
-    {NULL, NULL, 0, 0},
+    {UNUSED_PLAYER, NULL, 0, 0},
+    {UNUSED_PLAYER, NULL, 0, 0},
+    {UNUSED_PLAYER, NULL, 0, 0},
     {&gMPlayInfo16, sMPlayTracks16, 2, 0},
     {&gMPlayInfo17, sMPlayTracks17, 1, 0},
     {&gMPlayInfo18, sMPlayTracks18, 1, 0},

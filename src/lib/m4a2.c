@@ -1,4 +1,5 @@
 #include "m4a.h"
+#include "gba/romptr.h"
 #include "macros.h"
 #include "gba/io_reg.h"
 #include <stddef.h>
@@ -478,11 +479,13 @@ void m4aSoundVSyncOn() {
     soundInfo->pcmDmaCounter = 0;
     soundInfo->ident = ident - 10;
 
+#ifndef PLATFORM_ANDROID
     while (*(vu8*)REG_ADDR_VCOUNT == 159)
         ;
 
     while (*(vu8*)REG_ADDR_VCOUNT != 159)
         ;
+#endif
 
     REG_TM0CNT_L = -(280896 / soundInfo->pcmSamplesPerVBlank);
     REG_TM0CNT_H = TIMER_ENABLE;
@@ -571,7 +574,7 @@ void MPlayStart(MusicPlayerInfo* mplayInfo, SongHeader* songHeader) {
         || (mplayInfo->priority <= songHeader->priority)) {
         mplayInfo->status = 0;
         mplayInfo->songHeader = songHeader;
-        mplayInfo->tone = songHeader->tone;
+        mplayInfo->tone = GBA_PTR(songHeader->tone);
         mplayInfo->priority = songHeader->priority;
         mplayInfo->clock = 0;
         mplayInfo->tempoD = 150;
@@ -587,7 +590,7 @@ void MPlayStart(MusicPlayerInfo* mplayInfo, SongHeader* songHeader) {
             TrackStop(mplayInfo, track);
             track->flags = MPT_FLG_EXIST | MPT_FLG_START;
             track->chan = NULL;
-            track->cmdPtr = songHeader->part[i];
+            track->cmdPtr = GBA_PTR(songHeader->part[i]);
             i++;
             track++;
         }
@@ -1395,7 +1398,7 @@ void ply_xwave(MusicPlayerInfo* mplayInfo, MusicPlayerTrack* track) {
     READ_XCMD_BYTE(wav, 2)
     READ_XCMD_BYTE(wav, 3)
 
-    track->tone.wav = (WaveData*)wav;
+    track->tone.wav = GBA_PTR((WaveData*)wav);
     track->cmdPtr += 4;
 }
 
