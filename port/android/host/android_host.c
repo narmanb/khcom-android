@@ -1,0 +1,221 @@
+/*
+ * Minimal Android host for native bring-up.
+ *
+ * This deliberately has no Java/UI dependency yet. It runs the software PPU,
+ * audio/PSG mix and 60 Hz pacing so AgbMain() can execute against a real host
+ * while the Activity/OpenGL/AAudio front end is built separately.
+ */
+#include "port.h"
+#include "ppu.h"
+#include "android_host.h"
+
+#include <android/log.h>
+#include <errno.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <time.h>
+#include <unistd.h>
+
+#define LOG_TAG "KHCOM"
+#define FRAME_NS 16666667LL
+#define CODE_BLOCK_SIZE (1024u * 1024u)
+#define MAX_AUDIO_SAMPLES 2048
+
+static PpuFrame sFrame;
+static uint32_t sRgba[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
+static volatile uint16_t sKeys;
+static volatile uint32_t sFrameCounter;
+
+static int16_t sAudioScratch[MAX_AUDIO_SAMPLES * 2];
+
+static uint8_t* sCodeBase;
+static uint32_t sCodeUsed;
+static int sCodeLive;
+
+static int64_t sNextFrameNs;
+
+static int64_t MonotonicNs(void) {
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+
+static void SleepUntil(int64_t targetNs) {
+    struct timespec ts;
+
+    if (targetNs <= 0) {
+        return;
+    }
+    ts.tv_sec = targetNs / 1000000000LL;
+    ts.tv_nsec = targetNs % 1000000000LL;
+    while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) == EINTR) {
+    }
+}
+
+static int16_t Clamp16(int value) {
+    if (value > 32767) {
+        return 32767;
+    }
+    if (value < -32768) {
+        return -32768;
+    }
+    return (int16_t)value;
+}
+
+void AndroidHostSetKeys(uint16_t keys) {
+    sKeys = keys & 0x03FFu;
+}
+
+const uint32_t* AndroidHostGetFrame(void) {
+    return sRgba;
+}
+
+uint32_t AndroidHostGetFrameCounter(void) {
+    return sFrameCounter;
+}
+
+void PortCaptureLine(int y) {
+    if ((unsigned)y >= GBA_SCREEN_HEIGHT) {
+        return;
+    }
+    memcpy(sFrame.io[y], gGbaIo, PPU_LINE_IO_SIZE);
+}
+
+void PortCaptureSubmit(void) {
+    memcpy(sFrame.pltt, gGbaPltt, sizeof(sFrame.pltt));
+    memcpy(sFrame.oam, gGbaOam, sizeof(sFrame.oam));
+    memcpy(sFrame.vram, gGbaVram, sizeof(sFrame.vram));
+}
+
+void PortVBlankWait(void) {
+    int64_t now;
+
+    PpuSetOutput(sRgba, GBA_SCREEN_WIDTH, GBA_SCREEN_WIDTH);
+    PpuRenderFrame(&sFrame);
+    sFrameCounter++;
+
+    now = MonotonicNs();
+    if (sNextFrameNs == 0 || now - sNextFrameNs > FRAME_NS * 4) {
+        sNextFrameNs = now + FRAME_NS;
+    } else {
+        sNextFrameNs += FRAME_NS;
+    }
+    SleepUntil(sNextFrameNs);
+}
+
+uint16_t PortReadKeys(void) {
+    return sKeys;
+}
+
+void PortAudioPush(const int8_t* right, const int8_t* left, int samples, int rate) {
+    int i;
+
+    if (samples <= 0 || rate <= 0) {
+        return;
+    }
+    if (samples > MAX_AUDIO_SAMPLES) {
+        samples = MAX_AUDIO_SAMPLES;
+    }
+
+    memset(sAudioScratch, 0, (size_t)samples * 2u * sizeof(sAudioScratch[0]));
+    PsgRender(sAudioScratch, samples, rate);
+
+    for (i = 0; i < samples; i++) {
+        int r = ((int)right[i] << 6) + sAudioScratch[i * 2];
+        int l = ((int)left[i] << 6) + sAudioScratch[i * 2 + 1];
+
+        sAudioScratch[i * 2] = Clamp16(r);
+        sAudioScratch[i * 2 + 1] = Clamp16(l);
+    }
+
+    /*
+     * The samples are intentionally discarded during headless bring-up.
+     * The Android audio backend will consume this exact interleaved stream.
+     */
+}
+
+void* PortCodeAlloc(uint32_t size) {
+    void* result;
+
+    if (sCodeBase == NULL) {
+        sCodeBase = mmap(NULL, CODE_BLOCK_SIZE, PROT_READ | PROT_WRITE,
+                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (sCodeBase == MAP_FAILED) {
+            sCodeBase = NULL;
+            PortFatal("movie: mmap for executable memory failed");
+        }
+    }
+
+    size = (size + 63u) & ~63u;
+    if (sCodeUsed + size > CODE_BLOCK_SIZE) {
+        PortFatal("movie: executable memory exhausted (%u + %u)",
+                  (unsigned)sCodeUsed, (unsigned)size);
+    }
+
+    if (mprotect(sCodeBase, CODE_BLOCK_SIZE, PROT_READ | PROT_WRITE) != 0) {
+        PortFatal("movie: cannot make codec memory writable");
+    }
+
+    result = sCodeBase + sCodeUsed;
+    sCodeUsed += size;
+    sCodeLive++;
+    return result;
+}
+
+void PortCodeFree(void* p) {
+    (void)p;
+
+    if (sCodeLive > 0) {
+        sCodeLive--;
+    }
+    if (sCodeLive == 0) {
+        sCodeUsed = 0;
+    }
+}
+
+void PortCodeBeginWrite(void) {
+    if (sCodeBase != NULL &&
+        mprotect(sCodeBase, CODE_BLOCK_SIZE, PROT_READ | PROT_WRITE) != 0) {
+        PortFatal("movie: cannot reopen codec memory for writing");
+    }
+}
+
+void PortCodeEndWrite(void) {
+    if (sCodeBase == NULL || sCodeUsed == 0) {
+        return;
+    }
+
+    __builtin___clear_cache((char*)sCodeBase, (char*)sCodeBase + sCodeUsed);
+    if (mprotect(sCodeBase, CODE_BLOCK_SIZE, PROT_READ | PROT_EXEC) != 0) {
+        PortFatal("movie: cannot make codec memory executable");
+    }
+}
+
+void PortLog(const char* fmt, ...) {
+    char buffer[1024];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buffer, sizeof(buffer), fmt, ap);
+    va_end(ap);
+    __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "%s", buffer);
+}
+
+void PortFatal(const char* fmt, ...) {
+    char buffer[1024];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buffer, sizeof(buffer), fmt, ap);
+    va_end(ap);
+    __android_log_print(ANDROID_LOG_FATAL, LOG_TAG, "%s", buffer);
+    abort();
+}
+
+void PortSoftReset(void) {
+    PortFatal("soft reset requested before Android lifecycle restart is wired");
+}

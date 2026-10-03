@@ -16,6 +16,7 @@ add_library(khcom_android_platform STATIC
     game/m4a_port.c
     host/ppu.c
     host/psg.c
+    host/android_host.c
 )
 
 target_include_directories(khcom_android_platform
@@ -38,7 +39,10 @@ target_compile_options(khcom_android_platform PRIVATE
     -fwrapv
 )
 
-target_link_libraries(khcom_android_platform PUBLIC m)
+target_link_libraries(khcom_android_platform PUBLIC
+    m
+    log
+)
 
 set_target_properties(khcom_android_platform PROPERTIES
     POSITION_INDEPENDENT_CODE ON
