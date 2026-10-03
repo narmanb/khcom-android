@@ -1046,6 +1046,12 @@ u8 MapDoorWaitCard(MapDoorWork* p);
 u8 MapDoorWaitOpen(MapDoorWork* p);
 void CreateWorldPrize(s32 x, s32 y, s32 z);
 MapCell* MapGetCell(s16 x, s16 y);
+#ifdef PLATFORM_ANDROID
+MapCell* MapGetCellBus(s16 x, s16 y);
+#else
+/* The GBA reads the open bus through NULL itself. */
+#define MapGetCellBus MapGetCell
+#endif
 void MapComputeRowBounds();
 void MapCellSetBg3Piece(MapCell* p, s32 n);
 void MapCellSetBg2CornerPiece(MapCell* p, s32 n);

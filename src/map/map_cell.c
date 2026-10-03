@@ -149,10 +149,49 @@ s32 MapClampCameraY(s32 y) {
     return y;
 }
 
+#ifdef PLATFORM_ANDROID
+/*
+ * Widescreen support for the card-built rooms (port/vita/game/widescreen.c).
+ * The room's BG1-3 tilemaps are computed from the cells a strip at a time
+ * as the camera moves, so only the original 256-pixel window exists in VRAM;
+ * these compute any other tile the same way for the margins.
+ */
+static u8 sPortFieldView;
+
+s32 PortFieldView(s32* x, s32* y, u32* flags) {
+    if (!sPortFieldView || gFieldState == NULL || sMapCells == NULL || sMapRoomDef == NULL) {
+        return 0;
+    }
+    *x = gFieldState->x >> 8;
+    *y = gFieldState->y >> 8;
+    *flags = gMapRoomState != NULL ? gMapRoomState->flags : 0;
+    return 1;
+}
+
+/* Tile (xx, yy) of BG3, BG2 or BG1 as MapDrawBgs computes it. */
+u16 PortFieldTile(s32 bg, s32 xx, s32 yy) {
+    s16 c = (xx < 0) ? (xx - 8) / 4 : xx / 4;
+    s16 n = xx % 4;
+    s16 v = (yy < 0) ? (yy - 8) / 2 : yy / 2;
+    s16 m = yy % 2;
+    MapCell* e = MapGetCell(c, v);
+    u16* tiles;
+
+    if (e == NULL) {
+        return bg == 3 ? 0 : bg == 2 ? sMapRoomDef->map2[0x340] : sMapRoomDef->map[0x110];
+    }
+    tiles = bg == 3 ? e->bg3Map : bg == 2 ? e->bg2Map : e->bg1Map;
+    return tiles != NULL ? tiles[m * 32 + n] : 0;
+}
+#endif
+
 void MapSnapCamera() {
     s16 sx;
     s16 sy;
 
+#ifdef PLATFORM_ANDROID
+    sPortFieldView = 1;
+#endif
     gFieldState->x = MapClampCameraX(gFieldState->x2);
     gFieldState->y = MapClampCameraY(gFieldState->y2);
     sx = gFieldState->x >> 8;
@@ -506,6 +545,29 @@ void DestroyMapField() {
     TaskPoolDestroy(&gMapRoomState->tasks);
 }
 
+#ifdef PLATFORM_ANDROID
+/*
+ * Several lookups read neighbouring cells without checking for the edge of the
+ * map. On the GBA the NULL they get reads the BIOS open bus (the last BIOS
+ * opcode, 0xE3A02004) and writes to it are ignored; this cell reproduces that
+ * so those lookups behave the same without the fault handler.
+ */
+MapCell* MapGetCellBus(s16 x, s16 y) {
+    static MapCell sBusCell;
+    MapCell* p = MapGetCell(x, y);
+    u32* w;
+    u32 i;
+
+    if (p != 0) {
+        return p;
+    }
+    for (i = 0, w = (u32*)&sBusCell; i < sizeof(sBusCell) / 4; i++) {
+        w[i] = 0xE3A02004;
+    }
+    return &sBusCell;
+}
+
+#endif
 MapCell* MapGetCell(s16 x, s16 y) {
     if (y < 0 || y >= sMapRows) {
         return NULL;
@@ -581,6 +643,12 @@ void MapCellSetBg2Piece(MapCell* p, u8 n, u8 v) {
 }
 
 void MapCellSetFloorBg3Piece(MapCell* p) {
+#ifdef PLATFORM_ANDROID
+    /* Outside the map: every branch ends in MapCellSetBg3Piece(NULL), a no-op. */
+    if (p == NULL) {
+        return;
+    }
+#endif
     if (p->flags & 1) {
         MapCellSetBg3Piece(p, 1);
     } else if (p->flags & 2) {
@@ -701,9 +769,9 @@ void MapBuildStairs(u16 x, u16 y) {
 
         switch (e->type) {
         case 3:
-            MapGetCell(x, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-            MapGetCell(x - 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-            MapGetCell(x - 1, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x - 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x - 1, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
             v = GetRandomPieceVariant(38);
             e->flags |= MAP_CELL_FLAG_STAIRS;
             MapCellSetBg2PieceVariant(e, 38, v);
@@ -713,9 +781,9 @@ void MapBuildStairs(u16 x, u16 y) {
             MapCellSetBg2PieceVariant(e, 39, v);
             break;
         case 5:
-            MapGetCell(x, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-            MapGetCell(x + 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-            MapGetCell(x + 1, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x + 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x + 1, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
             v = GetRandomPieceVariant(43);
             e->flags |= MAP_CELL_FLAG_STAIRS;
             MapCellSetBg2PieceVariant(e, 43, v);
@@ -733,9 +801,9 @@ void MapBuildStairs(u16 x, u16 y) {
             MapCellSetBg2PieceVariant(e, 42, 0xFF);
             break;
         case 4:
-            MapGetCell(x, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-            MapGetCell(x + 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-            MapGetCell(x + 1, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x + 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x + 1, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
             v = GetRandomPieceVariant(40);
             e->flags |= MAP_CELL_FLAG_STAIRS;
             MapCellSetBg2PieceVariant(e, 40, v);
@@ -745,9 +813,9 @@ void MapBuildStairs(u16 x, u16 y) {
             go = 0;
             break;
         case 6:
-            MapGetCell(x, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-            MapGetCell(x - 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-            MapGetCell(x - 1, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x - 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+            MapGetCellBus(x - 1, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
             v = GetRandomPieceVariant(45);
             e->flags |= MAP_CELL_FLAG_STAIRS;
             MapCellSetBg2PieceVariant(e, 45, v);
@@ -769,22 +837,22 @@ void MapMarkJumpSpot(MapPlatform* p) {
 
     while (go) {
         s16 cy = y;
-        MapCell* c = MapGetCell(x, cy);
+        MapCell* c = MapGetCellBus(x, cy);
 
         switch (c->type) {
         case 4:
-            MapGetCell(x, y + 1)->flags |= MAP_CELL_FLAG_JUMP_PAD;
-            MapGetCell(x + 1, cy)->flags |= MAP_CELL_FLAG_JUMP_PAD;
-            MapGetCell(x + 1, y + 1)->flags |= MAP_CELL_FLAG_JUMP_PAD;
+            MapGetCellBus(x, y + 1)->flags |= MAP_CELL_FLAG_JUMP_PAD;
+            MapGetCellBus(x + 1, cy)->flags |= MAP_CELL_FLAG_JUMP_PAD;
+            MapGetCellBus(x + 1, y + 1)->flags |= MAP_CELL_FLAG_JUMP_PAD;
             c->flags |= MAP_CELL_FLAG_JUMP_PAD;
             p->x = x + 1;
             p->y = y + 1;
             go = 0;
             break;
         case 6:
-            MapGetCell(x, y + 1)->flags |= MAP_CELL_FLAG_JUMP_PAD;
-            MapGetCell(x - 1, cy)->flags |= MAP_CELL_FLAG_JUMP_PAD;
-            MapGetCell(x - 1, y + 1)->flags |= MAP_CELL_FLAG_JUMP_PAD;
+            MapGetCellBus(x, y + 1)->flags |= MAP_CELL_FLAG_JUMP_PAD;
+            MapGetCellBus(x - 1, cy)->flags |= MAP_CELL_FLAG_JUMP_PAD;
+            MapGetCellBus(x - 1, y + 1)->flags |= MAP_CELL_FLAG_JUMP_PAD;
             c->flags |= MAP_CELL_FLAG_JUMP_PAD;
             p->x = x;
             p->y = y + 1;
@@ -811,14 +879,14 @@ void MapFindPlatformStairs(MapPlatform* p) {
         y = sMapTopRow;
 
         while (y < sMapBottomRow) {
-            e = MapGetCell(x, y);
+            e = MapGetCellBus(x, y);
 
             if (e->type == 4 || e->type == 6) {
                 if (e->upperZ != -0x100000 && p->z == e->lowerZ) {
                     d = ((p->z - e->upperZ) >> 8) / 16;
 
                     if (FldPosHeightExceeds((FldPos*)e, 3)) {
-                        q = MapGetCell(x, y - d);
+                        q = MapGetCellBus(x, y - d);
 
                         if ((e->flags & (MAP_CELL_FLAG_EDGE_LEFT | MAP_CELL_FLAG_EDGE_RIGHT | MAP_CELL_FLAG_CORNER)) == 0 && (q->flags & (MAP_CELL_FLAG_EDGE_LEFT | MAP_CELL_FLAG_EDGE_RIGHT | MAP_CELL_FLAG_CORNER)) == 0) {
                             if (p->hasStairs == 0 ||
@@ -1015,7 +1083,7 @@ void MapMarkFloorVariants() {
         u16 x;
 
         for (x = 0; x < sMapCols; x++) {
-            MapCell* c = MapGetCell(x, y);
+            MapCell* c = MapGetCellBus(x, y);
             s32 v;
             s32 ok;
             s32 k;
@@ -1072,8 +1140,8 @@ void MapMarkCellEdges() {
 
     for (y = 0; y < sMapRows; y++) {
         for (x = 0; x < sMapCols - 1; x++) {
-            MapCell* a = MapGetCell(x, y);
-            MapCell* b = MapGetCell(x + 1, y);
+            MapCell* a = MapGetCellBus(x, y);
+            MapCell* b = MapGetCellBus(x + 1, y);
             s32 flag = 0;
 
             switch (a->type) {
@@ -1132,25 +1200,25 @@ void MapMarkCellEdges() {
 
             switch (a->type) {
             case 4:
-                if (MapGetCell(x + 1, y - 1)->type == 2) {
+                if (MapGetCellBus(x + 1, y - 1)->type == 2) {
                     a->flags |= MAP_CELL_FLAG_EDGE_RIGHT;
                 }
 
                 break;
             case 6:
-                if (MapGetCell(x - 1, y - 1)->type == 2) {
+                if (MapGetCellBus(x - 1, y - 1)->type == 2) {
                     a->flags |= MAP_CELL_FLAG_EDGE_LEFT;
                 }
 
                 break;
             case 3:
-                if (MapGetCell(x - 1, y + 1)->type == 1) {
+                if (MapGetCellBus(x - 1, y + 1)->type == 1) {
                     a->flags |= MAP_CELL_FLAG_EDGE_LEFT;
                 }
 
                 break;
             case 5:
-                if (MapGetCell(x + 1, y + 1)->type == 1) {
+                if (MapGetCellBus(x + 1, y + 1)->type == 1) {
                     a->flags |= MAP_CELL_FLAG_EDGE_RIGHT;
                 }
 
@@ -1228,7 +1296,7 @@ void MapAssignCellPieces() {
                     } else {
                         MapSetCornerCellPieces(i, j + 1, 4, 25);
 
-                        if ((MapGetCell(i, j + 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
+                        if ((MapGetCellBus(i, j + 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
                             MapCellSetFloorBg3Piece(MapGetCell(i, j + 2));
                             MapCellSetBg2Piece(MapGetCell(i, j + 2), 15, 0);
                         }
@@ -1242,7 +1310,7 @@ void MapAssignCellPieces() {
                     if (FldPosHeightExceeds((FldPos*)e, 2)) {
                         MapCellSetBg3Piece(MapGetCell(i, j + 1), 4);
                         MapCellSetBg2Piece(MapGetCell(i, j + 1), 14, v);
-                    } else if ((MapGetCell(i, j + 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
+                    } else if ((MapGetCellBus(i, j + 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
                         MapCellSetBg3Piece(MapGetCell(i, j + 1), 4);
                         MapCellSetBg2Piece(MapGetCell(i, j + 1), 17, v);
                         MapCellSetFloorBg3Piece(MapGetCell(i, j + 2));
@@ -1261,7 +1329,7 @@ void MapAssignCellPieces() {
                     } else {
                         MapSetCornerCellPieces(i, j + 1, 5, 31);
 
-                        if ((MapGetCell(i, j + 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
+                        if ((MapGetCellBus(i, j + 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
                             MapCellSetFloorBg3Piece(MapGetCell(i, j + 2));
                             MapCellSetBg2Piece(MapGetCell(i, j + 2), 20, 0);
                         }
@@ -1275,7 +1343,7 @@ void MapAssignCellPieces() {
                     if (FldPosHeightExceeds((FldPos*)e, 2)) {
                         MapCellSetBg3Piece(MapGetCell(i, j + 1), 5);
                         MapCellSetBg2Piece(MapGetCell(i, j + 1), 19, v);
-                    } else if ((MapGetCell(i, j + 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
+                    } else if ((MapGetCellBus(i, j + 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
                         MapCellSetBg3Piece(MapGetCell(i, j + 1), 5);
                         MapCellSetBg2Piece(MapGetCell(i, j + 1), 22, v);
                         MapCellSetFloorBg3Piece(MapGetCell(i, j + 2));
@@ -1291,7 +1359,7 @@ void MapAssignCellPieces() {
 
                     if (FldPosHeightExceeds((FldPos*)e, 2)) {
                         MapSetCornerCellPieces(i, j - 1, 4, 27);
-                    } else if ((MapGetCell(i, j - 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
+                    } else if ((MapGetCellBus(i, j - 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
                         MapSetCornerCellPieces(i, j - 1, 4, 28);
                     } else {
                         MapSetCornerCellPieces(i, j - 1, 4, 35);
@@ -1315,7 +1383,7 @@ void MapAssignCellPieces() {
 
                     if (FldPosHeightExceeds((FldPos*)e, 2)) {
                         MapSetCornerCellPieces(i, j - 1, 5, 33);
-                    } else if ((MapGetCell(i, j - 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
+                    } else if ((MapGetCellBus(i, j - 2)->flags & MAP_CELL_FLAG_CORNER) == 0) {
                         MapSetCornerCellPieces(i, j - 1, 5, 34);
                     } else {
                         MapSetCornerCellPieces(i, j - 1, 5, 36);
@@ -1370,7 +1438,7 @@ u8 MapCellHasType(s16 x, s16 y, u8 n) {
 }
 
 void MapAssignWallTopPieces(s16 x, s16 y) {
-    MapCell* p = MapGetCell(x, y + 7);
+    MapCell* p = MapGetCellBus(x, y + 7);
 
     if (p->upperZ == -0x100000) {
         switch (p->type) {
@@ -1434,7 +1502,7 @@ void MapAssignWallTopPieces(s16 x, s16 y) {
 }
 
 void MapAssignLedgePieces(s16 x, s16 y) {
-    MapCell* p = MapGetCell(x, y);
+    MapCell* p = MapGetCellBus(x, y);
 
     if (p->lowerZ == 0x100000 && p->bg1Piece == 0) {
         switch (p->type) {
@@ -1538,7 +1606,7 @@ void MapAssignLedgePieces(s16 x, s16 y) {
 }
 
 void MapAssignLeftBorderPiece(s16 y) {
-    switch (MapGetCell(0, y)->bg1Piece) {
+    switch (MapGetCellBus(0, y)->bg1Piece) {
     case 10:
         MapCellSetBg1Piece(0, y, 16);
         break;
@@ -1559,7 +1627,7 @@ void MapAssignLeftBorderPiece(s16 y) {
 
 void MapAssignRightBorderPiece(s16 j) {
     s16 x = sMapCols - 1;
-    MapCell* q = MapGetCell(x, j);
+    MapCell* q = MapGetCellBus(x, j);
 
     switch (q->bg1Piece) {
     case 12:
@@ -1607,7 +1675,7 @@ void MapComputeCellHeights() {
         z = 0x100000;
 
         for (j = sMapRows - 1; j >= 0; j--) {
-            p = MapGetCell(i, j);
+            p = MapGetCellBus(i, j);
 
             switch (p->type) {
             case 1:
@@ -1639,7 +1707,7 @@ void MapComputeCellHeights() {
         z = -0x100000;
 
         for (j = 0; j < sMapRows; j++) {
-            p = MapGetCell(i, j);
+            p = MapGetCellBus(i, j);
 
             switch (p->type) {
             case 1:
@@ -1683,19 +1751,19 @@ void MapPlaceDoorOnPlatform(MapPlatform* p, s32 a) {
 
         for (i = 0; i < w; i++) {
             for (y = sMapTopRow; y <= sMapBottomRow; y++) {
-                q = MapGetCell(x, y);
+                q = MapGetCellBus(x, y);
 
                 if (q->type == 6 && q->lowerZ == p->z && q->upperZ == -0x100000 && (q->flags & MAP_CELL_FLAG_STAIRS) == 0) {
                     e->cellX = x;
                     e->cellY = y;
                     q->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
                     q->flags |= MAP_CELL_FLAG_DOOR_WALL;
-                    MapGetCell(x, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x - 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x - 1, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x, y - 1)->flags |= MAP_CELL_FLAG_DOOR_WALL;
-                    MapGetCell(x, y - 2)->flags |= MAP_CELL_FLAG_DOOR_WALL;
-                    MapGetCell(x, y - 3)->flags |= MAP_CELL_FLAG_DOOR_WALL;
+                    MapGetCellBus(x, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x - 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x - 1, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x, y - 1)->flags |= MAP_CELL_FLAG_DOOR_WALL;
+                    MapGetCellBus(x, y - 2)->flags |= MAP_CELL_FLAG_DOOR_WALL;
+                    MapGetCellBus(x, y - 3)->flags |= MAP_CELL_FLAG_DOOR_WALL;
                     return;
                 }
             }
@@ -1709,15 +1777,15 @@ void MapPlaceDoorOnPlatform(MapPlatform* p, s32 a) {
 
         for (i = 0; i < w; i++) {
             for (y = sMapTopRow; y <= sMapBottomRow; y++) {
-                q = MapGetCell(x, y);
+                q = MapGetCellBus(x, y);
 
                 if (q->type == 3 && q->upperZ == p->z && q->lowerZ == 0x100000 && (q->flags & MAP_CELL_FLAG_STAIRS) == 0) {
                     e->cellX = x;
                     e->cellY = y;
-                    MapGetCell(x, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x - 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x - 1, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x - 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x - 1, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
                     return;
                 }
             }
@@ -1731,15 +1799,15 @@ void MapPlaceDoorOnPlatform(MapPlatform* p, s32 a) {
 
         for (i = 0; i < w; i++) {
             for (y = sMapTopRow; y <= sMapBottomRow; y++) {
-                q = MapGetCell(x, y);
+                q = MapGetCellBus(x, y);
 
                 if (q->type == 5 && q->upperZ == p->z && q->lowerZ == 0x100000 && (q->flags & MAP_CELL_FLAG_STAIRS) == 0) {
                     e->cellX = x;
                     e->cellY = y;
-                    MapGetCell(x, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x + 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x + 1, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x + 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x + 1, y - 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
                     return;
                 }
             }
@@ -1753,19 +1821,19 @@ void MapPlaceDoorOnPlatform(MapPlatform* p, s32 a) {
 
         for (i = 0; i < w; i++) {
             for (y = sMapTopRow; y <= sMapBottomRow; y++) {
-                q = MapGetCell(x, y);
+                q = MapGetCellBus(x, y);
 
                 if (q->type == 4 && q->lowerZ == p->z && q->upperZ == -0x100000 && (q->flags & MAP_CELL_FLAG_STAIRS) == 0) {
                     e->cellX = x;
                     e->cellY = y;
                     q->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
                     q->flags |= MAP_CELL_FLAG_DOOR_WALL;
-                    MapGetCell(x, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x + 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x + 1, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
-                    MapGetCell(x, y - 1)->flags |= MAP_CELL_FLAG_DOOR_WALL;
-                    MapGetCell(x, y - 2)->flags |= MAP_CELL_FLAG_DOOR_WALL;
-                    MapGetCell(x, y - 3)->flags |= MAP_CELL_FLAG_DOOR_WALL;
+                    MapGetCellBus(x, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x + 1, y)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x + 1, y + 1)->flags |= MAP_CELL_FLAG_KEEP_CLEAR;
+                    MapGetCellBus(x, y - 1)->flags |= MAP_CELL_FLAG_DOOR_WALL;
+                    MapGetCellBus(x, y - 2)->flags |= MAP_CELL_FLAG_DOOR_WALL;
+                    MapGetCellBus(x, y - 3)->flags |= MAP_CELL_FLAG_DOOR_WALL;
                     return;
                 }
             }
@@ -1924,7 +1992,7 @@ void MapComputeRowBounds() {
 
     for (i = 0; i < sMapCols; i++) {
         for (j = 0; j < sMapRows; j++) {
-            switch (MapGetCell(i, j)->type) {
+            switch (MapGetCellBus(i, j)->type) {
             case 2:
             case 4:
             case 6:
@@ -1987,7 +2055,7 @@ s32 PickRandomBottomEdgeType(s16 a, s16 b, s16 c) {
 }
 
 s32 GetMatchingBottomEdgeType(s16 x, s16 y) {
-    switch (MapGetCell(x, y)->type) {
+    switch (MapGetCellBus(x, y)->type) {
     case 6:
         return 5;
     case 2:
@@ -2044,7 +2112,7 @@ s32 GetTopEdgeTypeBelowLedge(u8 d, s16 x, s16 y) {
 
     if (d != 0) {
         for (i = y; i >= 0; i--) {
-            switch (MapGetCell(x, i)->type) {
+            switch (MapGetCellBus(x, i)->type) {
             case 3:
                 return 4;
             case 5:
@@ -2423,7 +2491,7 @@ void MapFindLowestEdgeRightward(s32 a, s16* px, s16* py, s16* pz, s16 lo, s16 hi
         s32 j;
 
         for (j = sMapRows - 1; j >= 0; j--) {
-            MapCell* p = MapGetCell(x, j);
+            MapCell* p = MapGetCellBus(x, j);
 
             if (p->type == a) {
                 *px = x;
@@ -2457,7 +2525,7 @@ void MapFindLowestEdgeLeftward(s32 a, s16* px, s16* py, s16* pz, s16 e, s16 f) {
 
     for (i = 0; i < n; i++) {
         for (j = sMapRows - 1; j >= 0; j--) {
-            q = MapGetCell(x, j);
+            q = MapGetCellBus(x, j);
 
             if (q->type == a) {
                 *px = x;
@@ -2489,7 +2557,7 @@ u8 MapFindSpanBelowPlatforms(s16* a, s16* b, s16* c, s16* d) {
 
     for (x = 0; x < sMapCols; x++) {
         for (y = sMapRows - 1; y >= 0; y--) {
-            p = MapGetCell(x, y);
+            p = MapGetCellBus(x, y);
 
             if (p->type == 3) {
                 x1 = x;
@@ -2513,7 +2581,7 @@ u8 MapFindSpanBelowPlatforms(s16* a, s16* b, s16* c, s16* d) {
 
     for (x = sMapCols - 1; x >= 0; x--) {
         for (y = sMapRows - 1; y >= 0; y--) {
-            p = MapGetCell(x, y);
+            p = MapGetCellBus(x, y);
 
             if (p->type == 5) {
                 x2 = x + 1;
@@ -2821,6 +2889,9 @@ void MapGenerateRoom(u16 a, u16 b) {
 }
 
 void MapFreeRoom() {
+#ifdef PLATFORM_ANDROID
+    sPortFieldView = 0;
+#endif
     EwramFree(sMapBgBuffer);
 
     if (gGameState.fieldResume == 0) {
