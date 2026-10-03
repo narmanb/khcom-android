@@ -5,6 +5,20 @@
 
 #define GBA_SCREEN_WIDTH 240
 #define GBA_SCREEN_HEIGHT 160
+#define PORT_MAX_SCREEN_WIDTH 288
+
+extern uint8_t gGbaIo[0x400];
+extern uint8_t gGbaPltt[0x400];
+extern uint8_t gGbaVram[0x18000];
+extern uint8_t gGbaOam[0x400];
+extern uint8_t gGbaSram[0x10000];
+
+void PortAudioPush(const int8_t* right, const int8_t* left, int samples, int rate);
+void PsgNewNotes(unsigned mask);
+void* PortCodeAlloc(uint32_t size);
+void PortCodeFree(void* p);
+void PortCodeBeginWrite(void);
+void PortCodeEndWrite(void);
 
 void PortCaptureLine(int y);
 void PortCaptureSubmit(void);

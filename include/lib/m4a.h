@@ -56,8 +56,13 @@
 #define FADE_VOL_MAX   64
 #define FADE_VOL_SHIFT 2
 
+#ifdef PLATFORM_ANDROID
+#define NUM_MUSIC_PLAYERS 0x1A
+#define MAX_LINES 0x50
+#else
 #define NUM_MUSIC_PLAYERS ((u16)gNumMusicPlayers)
 #define MAX_LINES ((u32)gMaxLines)
+#endif
 
 typedef struct WaveData {
     u16 type;
