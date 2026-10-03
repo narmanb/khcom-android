@@ -11,6 +11,7 @@ endif()
 
 add_library(khcom_android_platform STATIC
     game/gba_memory.c
+    game/gba_system.c
 )
 
 target_include_directories(khcom_android_platform
@@ -32,6 +33,8 @@ target_compile_options(khcom_android_platform PRIVATE
     -fno-strict-aliasing
     -fwrapv
 )
+
+target_link_libraries(khcom_android_platform PUBLIC m)
 
 set_target_properties(khcom_android_platform PROPERTIES
     POSITION_INDEPENDENT_CODE ON
