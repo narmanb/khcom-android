@@ -12,6 +12,7 @@ endif()
 add_library(khcom_android_platform STATIC
     game/gba_memory.c
     game/gba_system.c
+    host/android_rom.c
 )
 
 target_include_directories(khcom_android_platform
