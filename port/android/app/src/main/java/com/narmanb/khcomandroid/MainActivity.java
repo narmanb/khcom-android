@@ -18,6 +18,8 @@ public final class MainActivity extends Activity {
     private static final int PICK_ROM = 1001;
     private static final String ROM_NAME = "rom.gba";
 
+    private AudioPlayer audioPlayer;
+
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -37,7 +39,28 @@ public final class MainActivity extends Activity {
         if (NativeBridge.isStarted()) {
             NativeBridge.flushSave();
         }
+        if (audioPlayer != null) {
+            audioPlayer.pause();
+        }
         super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (audioPlayer != null) {
+            audioPlayer.resume();
+        }
+        hideSystemUi();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (audioPlayer != null) {
+            audioPlayer.stop();
+            audioPlayer = null;
+        }
+        super.onDestroy();
     }
 
     @Override
@@ -126,6 +149,8 @@ public final class MainActivity extends Activity {
                 return;
             }
             setContentView(new GameView(this));
+            audioPlayer = new AudioPlayer();
+            audioPlayer.start();
         } catch (IOException e) {
             showError("rommap.bin is missing from this build.", false);
         } catch (UnsatisfiedLinkError e) {

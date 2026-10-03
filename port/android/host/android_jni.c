@@ -114,3 +114,29 @@ Java_com_narmanb_khcomandroid_NativeBridge_flushSave(
     (void)clazz;
     AndroidHostFlushSram();
 }
+
+JNIEXPORT jint JNICALL
+Java_com_narmanb_khcomandroid_NativeBridge_readAudio(
+    JNIEnv* env, jclass clazz, jshortArray output, jint frames) {
+    jshort* samples;
+    jsize capacity;
+    int done;
+
+    (void)clazz;
+    if (output == NULL || frames <= 0) {
+        return 0;
+    }
+
+    capacity = (*env)->GetArrayLength(env, output);
+    if (capacity < frames * 2) {
+        frames = capacity / 2;
+    }
+    samples = (*env)->GetShortArrayElements(env, output, NULL);
+    if (samples == NULL) {
+        return 0;
+    }
+
+    done = AndroidHostReadAudio((int16_t*)samples, frames);
+    (*env)->ReleaseShortArrayElements(env, output, samples, 0);
+    return done;
+}

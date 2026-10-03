@@ -23,7 +23,10 @@
 #define LOG_TAG "KHCOM"
 #define FRAME_NS 16666667LL
 #define CODE_BLOCK_SIZE (1024u * 1024u)
-#define MAX_AUDIO_SAMPLES 2048
+#define MAX_AUDIO_SAMPLES 4096
+#define AUDIO_OUT_RATE 48000
+#define AUDIO_RING_SIZE 16384
+#define AUDIO_TARGET_FILL 2048
 
 static PpuFrame sFrame;
 static uint32_t sRgba[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
@@ -35,7 +38,11 @@ static char sSaveTmpPath[1032];
 static int sSramDirty;
 static int sSramFlushFrames;
 
-static int16_t sAudioScratch[MAX_AUDIO_SAMPLES * 2];
+static int16_t sAudioPsg[MAX_AUDIO_SAMPLES * 2];
+static int16_t sAudioRing[AUDIO_RING_SIZE * 2];
+static volatile uint32_t sAudioWritePos;
+static volatile uint32_t sAudioReadPos;
+static volatile int sAudioSrcRate = 15768;
 
 static uint8_t* sCodeBase;
 static uint32_t sCodeUsed;
@@ -203,30 +210,80 @@ void PortSramWritten(void) {
 }
 
 void PortAudioPush(const int8_t* right, const int8_t* left, int samples, int rate) {
+    uint32_t write = sAudioWritePos;
     int i;
 
-    if (samples <= 0 || rate <= 0) {
+    if (samples <= 0) {
         return;
+    }
+    if (rate > 0) {
+        sAudioSrcRate = rate;
     }
     if (samples > MAX_AUDIO_SAMPLES) {
         samples = MAX_AUDIO_SAMPLES;
     }
 
-    memset(sAudioScratch, 0, (size_t)samples * 2u * sizeof(sAudioScratch[0]));
-    PsgRender(sAudioScratch, samples, rate);
+    /* PSG advances even when the DirectSound frame must be dropped. */
+    PsgRender(sAudioPsg, samples, sAudioSrcRate);
 
-    for (i = 0; i < samples; i++) {
-        int l = ((int)left[i] << 6) + sAudioScratch[i * 2];
-        int r = ((int)right[i] << 6) + sAudioScratch[i * 2 + 1];
-
-        sAudioScratch[i * 2] = Clamp16(l);
-        sAudioScratch[i * 2 + 1] = Clamp16(r);
+    if ((uint32_t)(write - sAudioReadPos) + (uint32_t)samples >= AUDIO_RING_SIZE) {
+        return;
     }
 
-    /*
-     * The samples are intentionally discarded during headless bring-up.
-     * The Android audio backend will consume this exact interleaved stream.
-     */
+    for (i = 0; i < samples; i++, write++) {
+        uint32_t idx = (write & (AUDIO_RING_SIZE - 1u)) * 2u;
+        sAudioRing[idx] = Clamp16((int)left[i] * 256 + sAudioPsg[i * 2]);
+        sAudioRing[idx + 1] = Clamp16((int)right[i] * 256 + sAudioPsg[i * 2 + 1]);
+    }
+    sAudioWritePos = write;
+}
+
+int AndroidHostReadAudio(int16_t* out, int frames) {
+    static uint32_t frac;
+    static int16_t prev[2];
+    uint32_t avail;
+    int64_t step;
+    int i;
+
+    if (out == NULL || frames <= 0) {
+        return 0;
+    }
+
+    avail = sAudioWritePos - sAudioReadPos;
+    step = ((int64_t)sAudioSrcRate << 16) / AUDIO_OUT_RATE;
+    step += step * ((int32_t)avail - AUDIO_TARGET_FILL) /
+            (AUDIO_TARGET_FILL * 200);
+
+    for (i = 0; i < frames; i++) {
+        uint32_t read = sAudioReadPos;
+        int16_t current[2];
+
+        if (sAudioWritePos == read) {
+            out[i * 2] = prev[0];
+            out[i * 2 + 1] = prev[1];
+            continue;
+        }
+
+        current[0] = sAudioRing[(read & (AUDIO_RING_SIZE - 1u)) * 2u];
+        current[1] = sAudioRing[(read & (AUDIO_RING_SIZE - 1u)) * 2u + 1u];
+        out[i * 2] = (int16_t)(prev[0] +
+            (((current[0] - prev[0]) * (int32_t)frac) >> 16));
+        out[i * 2 + 1] = (int16_t)(prev[1] +
+            (((current[1] - prev[1]) * (int32_t)frac) >> 16));
+
+        frac += (uint32_t)step;
+        while (frac >= 0x10000u && sAudioWritePos != sAudioReadPos) {
+            frac -= 0x10000u;
+            prev[0] = sAudioRing[(sAudioReadPos & (AUDIO_RING_SIZE - 1u)) * 2u];
+            prev[1] = sAudioRing[(sAudioReadPos & (AUDIO_RING_SIZE - 1u)) * 2u + 1u];
+            sAudioReadPos++;
+        }
+        if (frac >= 0x10000u) {
+            frac = 0xFFFFu;
+        }
+    }
+
+    return frames;
 }
 
 void* PortCodeAlloc(uint32_t size) {

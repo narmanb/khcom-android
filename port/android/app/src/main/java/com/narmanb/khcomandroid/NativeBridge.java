@@ -16,6 +16,7 @@ final class NativeBridge {
     static native void setKeys(int keys);
     static native boolean isStarted();
     static native void flushSave();
+    static native int readAudio(short[] output, int frames);
 
     static ByteBuffer nativeOrderFrameBuffer() {
         ByteBuffer buffer = frameBuffer();
