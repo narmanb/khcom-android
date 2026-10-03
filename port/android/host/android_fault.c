@@ -378,8 +378,10 @@ static int EmulateThumb(mcontext_t* m) {
 static void ChainOrCrash(int sig, siginfo_t* info, void* context) {
     if (sOldSegv.sa_flags & SA_SIGINFO) {
         if (sOldSegv.sa_sigaction != NULL &&
-            sOldSegv.sa_sigaction != (void*)SIG_DFL &&
-            sOldSegv.sa_sigaction != (void*)SIG_IGN) {
+            sOldSegv.sa_sigaction !=
+                (void (*)(int, siginfo_t*, void*))SIG_DFL &&
+            sOldSegv.sa_sigaction !=
+                (void (*)(int, siginfo_t*, void*))SIG_IGN) {
             sOldSegv.sa_sigaction(sig, info, context);
             return;
         }

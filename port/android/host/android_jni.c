@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "android_fault.h"
 #include "android_host.h"
 #include "android_rom.h"
 
@@ -63,6 +64,11 @@ Java_com_narmanb_khcomandroid_NativeBridge_start(
 
     (*env)->ReleaseByteArrayElements(env, mapBytes, map, JNI_ABORT);
     (*env)->ReleaseStringUTFChars(env, romPath, path);
+
+    if (!AndroidFaultInit()) {
+        return (*env)->NewStringUTF(
+            env, "Could not install ARM32 GBA address fault handler");
+    }
 
     rc = pthread_create(&thread, NULL, GameThread, NULL);
     if (rc != 0) {

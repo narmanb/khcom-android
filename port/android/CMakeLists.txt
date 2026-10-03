@@ -13,6 +13,7 @@ add_library(khcom_android_platform STATIC
     game/gba_memory.c
     game/gba_system.c
     host/android_rom.c
+    host/android_fault.c
     game/m4a_port.c
     host/ppu.c
     host/psg.c
