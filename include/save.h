@@ -2,13 +2,14 @@
 #define GUARD_SAVE_H
 
 #include "types.h"
+#include "gba/hwaddr.h"
 #include "save_types.h"
 
 extern u8 gSramFileLarge[];
 
-#define SRAM_HEADER ((u8*)0x0E000010)
-#define SRAM_SYSTEM ((u8*)0x0E000090)
-#define SRAM_FILE_SMALL ((u8*)0x0E001EC0)
+#define SRAM_HEADER ((u8*)HW_SRAM(0x10))
+#define SRAM_SYSTEM ((u8*)HW_SRAM(0x90))
+#define SRAM_FILE_SMALL ((u8*)HW_SRAM(0x1EC0))
 
 #define SAVE_HEADER_SIZE 0x40
 #define SAVE_SYSTEM_SIZE 0xF14

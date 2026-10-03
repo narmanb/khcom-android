@@ -25,6 +25,15 @@
     CpuFastSet((void*)&tmp, dest, CPU_FAST_SET_SRC_FIXED | (((size) / 4) & 0x1FFFFF));        \
 }
 
+#ifdef PLATFORM_ANDROID
+/*
+ * Preserve full native pointers in the Android DMA shim. The GBA register
+ * image remains 32-bit, but DMA can legally be fed stack/heap pointers.
+ */
+#define DmaSet(dmaNum, src, dest, control) \
+    AndroidDmaSet((dmaNum), (const void*)(src), (void*)(dest), (u32)(control))
+#define DmaStop(dmaNum) AndroidDmaStop((dmaNum))
+#else
 #define DmaSet(dmaNum, src, dest, control)       \
 {                                                \
     vu32* dmaRegs = (vu32*)REG_ADDR_DMA##dmaNum; \
@@ -41,6 +50,7 @@
     dmaRegs[5] &= ~DMA_ENABLE;                                  \
     dmaRegs[5];                                                 \
 }
+#endif
 
 #define DmaCopy16(dmaNum, src, dest, size) \
     DmaSet(dmaNum, src, dest, (DMA_ENABLE << 16) | ((size) / 2))

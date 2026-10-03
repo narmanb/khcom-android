@@ -3,7 +3,15 @@
 
 #include "types.h"
 
+#ifdef PLATFORM_ANDROID
+#include <stdint.h>
+extern unsigned char gGbaIo[0x400];
+void AndroidDmaSet(int channel, const void* src, void* dst, u32 control);
+void AndroidDmaStop(int channel);
+#define REG_BASE ((uintptr_t)gGbaIo)
+#else
 #define REG_BASE 0x04000000
+#endif
 
 #define REG_OFFSET_DISPCNT     0x0
 #define REG_OFFSET_DISPSTAT    0x4
