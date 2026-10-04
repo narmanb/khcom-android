@@ -94,7 +94,7 @@ jobs:
           KHCOM_GDRIVE_ROM_URL: ${{ secrets.KHCOM_GDRIVE_ROM_URL }}
         run: |
           set -euo pipefail
-          python3 -m gdown --fuzzy "$KHCOM_GDRIVE_ROM_URL" -O "$RUNNER_TEMP/B8CE.gba"
+          python3 -m gdown "$KHCOM_GDRIVE_ROM_URL" -O "$RUNNER_TEMP/B8CE.gba"
           echo "10729bd884f8fdca7a310b6d606c52e46657aa48  $RUNNER_TEMP/B8CE.gba" | sha1sum -c -
 
       - name: Download and verify update signing key from Google Drive
@@ -103,7 +103,7 @@ jobs:
           KHCOM_GDRIVE_KEYSTORE_URL: ${{ secrets.KHCOM_GDRIVE_KEYSTORE_URL }}
         run: |
           set -euo pipefail
-          python3 -m gdown --fuzzy "$KHCOM_GDRIVE_KEYSTORE_URL" -O "$RUNNER_TEMP/khcom-update.keystore"
+          python3 -m gdown "$KHCOM_GDRIVE_KEYSTORE_URL" -O "$RUNNER_TEMP/khcom-update.keystore"
           echo "0268099e927c0f00284e54279fb315dd5944c68502eb699046562e11241d9c1e  $RUNNER_TEMP/khcom-update.keystore" | sha256sum -c -
           chmod 600 "$RUNNER_TEMP/khcom-update.keystore"
 
