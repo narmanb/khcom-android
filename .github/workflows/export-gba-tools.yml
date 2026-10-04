@@ -40,7 +40,11 @@ jobs:
       - name: Build pinned legacy GBA toolchain
         run: |
           set -euxo pipefail
-          python3 tools/setup_legacy_toolchain.py
+          if ! python3 tools/setup_legacy_toolchain.py; then
+            echo "----- legacy setup log -----"
+            tail -n 300 build/toolchain/setup.log || true
+            exit 1
+          fi
           test -x tools/legacy/bin/arm-elf-as
           test -x tools/legacy/bin/arm-elf-ld
           test -f tools/legacy/lib/libgcc.a
