@@ -1,5 +1,5 @@
 name: Android port build
-# rebuild trigger: test3 recovery
+# rebuild trigger: tutorial reload crash fix
 
 on:
   push:
