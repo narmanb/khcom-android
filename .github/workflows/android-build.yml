@@ -1,22 +1,24 @@
-name: Android port build
-# rebuild trigger: tutorial reload crash fix
+name: Android source build
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - android-port
     paths:
       - .github/workflows/android-build.yml
-  workflow_dispatch:
+      - tools/android/build_android_from_rom.sh
+      - tools/setup_legacy_toolchain.py
+      - tools/fetch_gbagfx.sh
+      - port/android/app/build.gradle
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Check out Android port
@@ -24,82 +26,141 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Build verified US GBA reference
+      - name: Install public build dependencies
         run: |
-          docker run --rm             -v "$PWD:/work"             -w /work             ghcr.io/pheenoh/khcom-build:main             bash -lc '
-              set -euxo pipefail
-              git config --global --add safe.directory /work
-              mkdir -p tools roms
-              cp -a /agbcc/tools/agbcc tools/
-              python3 tools/setup_legacy_toolchain.py
-              apt-get update -qq
-              apt-get install -y -qq --no-install-recommends libpng-dev pkg-config
-              python3 -m pip install --break-system-packages pyyaml pillow || python3 -m pip install pyyaml pillow
-              sh tools/fetch_gbagfx.sh
-              cp /orig/B8CE.gba roms/B8CE.gba
-              echo "10729bd884f8fdca7a310b6d606c52e46657aa48  roms/B8CE.gba" | sha1sum -c -
-              python3 tools/extract_assets.py us
-              python3 configure.py --version us
-              ninja
-              echo "10729bd884f8fdca7a310b6d606c52e46657aa48  build/us/com_us.gba" | sha1sum -c -
-            '
-          sudo chown -R "$(id -u):$(id -g)" .
-
-      - name: Install Android native build dependencies
-        run: |
+          set -euxo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends binutils-arm-none-eabi
-          python3 -m pip install --user pyyaml pillow
+          sudo apt-get install -y -qq --no-install-recommends \
+            build-essential flex bison ninja-build git curl unzip \
+            libpng-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi \
+            python3-pip
+          python3 -m pip install --user --break-system-packages pyyaml pillow
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Restore public toolchain cache
+        id: toolcache
+        uses: actions/cache@v4
+        with:
+          path: |
+            tools/agbcc
+            tools/legacy
+            tools/gbagfx
+          key: khcom-public-toolchain-v2-${{ runner.os }}
+
+      - name: Bootstrap pinned pret agbcc
+        if: steps.toolcache.outputs.cache-hit != 'true'
+        run: |
+          set -euxo pipefail
+          TMP_AGBCC="$(mktemp -d)"
+          git clone --quiet https://github.com/pret/agbcc.git "$TMP_AGBCC/agbcc"
+          git -C "$TMP_AGBCC/agbcc" checkout --quiet da598c1d918402c42c0c0d7128ba14567f3175e9
+          (
+            cd "$TMP_AGBCC/agbcc"
+            ./build.sh
+            ./install.sh "$GITHUB_WORKSPACE"
+          )
+
+      - name: Build pinned legacy toolchain
+        if: steps.toolcache.outputs.cache-hit != 'true'
+        run: |
+          set -euxo pipefail
+          python3 tools/setup_legacy_toolchain.py
+          sh tools/fetch_gbagfx.sh
+
+      - name: Verify public toolchain
+        run: |
+          set -euxo pipefail
+          test -x tools/agbcc/bin/old_agbcc
+          test -x tools/legacy/bin/arm-elf-as
+          test -x tools/legacy/bin/arm-elf-ld
+          test -f tools/legacy/lib/libgcc.a
+          test -f tools/legacy/lib/libc.a
+          test -x tools/gbagfx/gbagfx
+          printf '#define KHCOM_CPP_PROBE 1\n' | arm-none-eabi-cpp -P - >/dev/null
+          tools/legacy/bin/arm-elf-as --version | head -1 | grep -F 'GNU assembler 2.10'
+          tools/legacy/bin/arm-elf-ld --version | head -1 | grep -F 'GNU ld 2.10'
+
+      - name: Detect private full-build inputs
+        id: private_inputs
+        env:
+          KHCOM_US_ROM_URL: ${{ secrets.KHCOM_US_ROM_URL }}
+          KHCOM_ANDROID_KEYSTORE_B64: ${{ secrets.KHCOM_ANDROID_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -n "$KHCOM_US_ROM_URL" ] && [ -n "$KHCOM_ANDROID_KEYSTORE_B64" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Public toolchain verified. Full APK build skipped because KHCOM_US_ROM_URL and/or KHCOM_ANDROID_KEYSTORE_B64 is not configured."
+          fi
+
+      - name: Download and verify private US ROM
+        if: steps.private_inputs.outputs.available == 'true'
+        env:
+          KHCOM_US_ROM_URL: ${{ secrets.KHCOM_US_ROM_URL }}
+        run: |
+          set -euxo pipefail
+          curl --fail --location --retry 3 "$KHCOM_US_ROM_URL" -o "$RUNNER_TEMP/B8CE.gba"
+          echo "10729bd884f8fdca7a310b6d606c52e46657aa48  $RUNNER_TEMP/B8CE.gba" | sha1sum -c -
+
+      - name: Restore update signing key
+        if: steps.private_inputs.outputs.available == 'true'
+        env:
+          KHCOM_ANDROID_KEYSTORE_B64: ${{ secrets.KHCOM_ANDROID_KEYSTORE_B64 }}
+        run: |
+          set -euxo pipefail
+          printf '%s' "$KHCOM_ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/khcom-update.keystore"
+          chmod 600 "$RUNNER_TEMP/khcom-update.keystore"
+
+      - name: Set up Gradle
+        if: steps.private_inputs.outputs.available == 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+
       - name: Locate Android NDK
+        if: steps.private_inputs.outputs.available == 'true'
         id: ndk
         run: |
-          set -eux
+          set -euxo pipefail
           NDK_ROOT="${ANDROID_NDK_HOME:-}"
           if [ -z "$NDK_ROOT" ] || [ ! -d "$NDK_ROOT" ]; then
             NDK_ROOT="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           fi
           test -x "$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
           echo "root=$NDK_ROOT" >> "$GITHUB_OUTPUT"
-          echo "Using NDK: $NDK_ROOT"
 
-      - name: Build and strip native Android library
+      - name: Build clean ROM-free update APK
+        if: steps.private_inputs.outputs.available == 'true'
+        env:
+          KHCOM_SIGNING_STORE_PASSWORD: ${{ secrets.KHCOM_SIGNING_STORE_PASSWORD }}
+          KHCOM_SIGNING_KEY_ALIAS: ${{ secrets.KHCOM_SIGNING_KEY_ALIAS }}
+          KHCOM_SIGNING_KEY_PASSWORD: ${{ secrets.KHCOM_SIGNING_KEY_PASSWORD }}
+          KHCOM_VERSION_CODE: ${{ vars.KHCOM_VERSION_CODE }}
+          KHCOM_VERSION_NAME: ${{ vars.KHCOM_VERSION_NAME }}
         run: |
           set -euxo pipefail
-          python3 tools/android/configure_android.py             --version us             --ndk "${{ steps.ndk.outputs.root }}"             --api 23
-          ninja -f build.android.ninja android-native
-          cat build/android/us/package/rom_audit.txt
-          rm -f roms/B8CE.gba
+          args=(
+            --rom "$RUNNER_TEMP/B8CE.gba"
+            --ndk "${{ steps.ndk.outputs.root }}"
+            --keystore "$RUNNER_TEMP/khcom-update.keystore"
+            --require-update-signing
+            --clean
+            --output "$RUNNER_TEMP/KHCoM-Android-RP5-sourcebuild.apk"
+          )
+          if [ -n "${KHCOM_VERSION_CODE:-}" ]; then
+            args+=(--version-code "$KHCOM_VERSION_CODE")
+          fi
+          if [ -n "${KHCOM_VERSION_NAME:-}" ]; then
+            args+=(--version-name "$KHCOM_VERSION_NAME")
+          fi
+          tools/android/build_android_from_rom.sh "${args[@]}"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.6.0'
-
-      - name: Assemble debug APK
-        working-directory: port/android
-        run: gradle --stacktrace :app:assembleDebug
-
-      - name: Verify APK inputs
-        run: |
-          test -f port/android/app/build/outputs/apk/debug/app-debug.apk
-          test -f build/android/us/package/jniLibs/armeabi-v7a/libkhcom.so
-          test -f build/android/us/package/assets/rommap.bin
-          test ! -f roms/B8CE.gba
-          unzip -l port/android/app/build/outputs/apk/debug/app-debug.apk | tee build/android/us/apk_contents.txt
-          ! unzip -l port/android/app/build/outputs/apk/debug/app-debug.apk | grep -Ei '\.gba$|B8CE\.gba'
-
-      - name: Upload Android build
+      - name: Upload verified Android build
+        if: steps.private_inputs.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: khcom-android-debug
-          path: |
-            port/android/app/build/outputs/apk/debug/app-debug.apk
-            build/android/us/package/rom_audit.txt
-            build/android/us/apk_contents.txt
+          name: khcom-android-sourcebuild
+          path: ${{ runner.temp }}/KHCoM-Android-RP5-sourcebuild.apk
           if-no-files-found: error
           retention-days: 7
