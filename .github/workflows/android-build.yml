@@ -34,7 +34,7 @@ jobs:
             build-essential flex bison ninja-build git curl unzip \
             libpng-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi \
             python3-pip
-          python3 -m pip install --user --break-system-packages pyyaml pillow
+          python3 -m pip install --user --break-system-packages pyyaml pillow gdown
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Restore public toolchain cache
@@ -80,36 +80,37 @@ jobs:
           tools/legacy/bin/arm-elf-as --version | head -1 | grep -F 'GNU assembler 2.10'
           tools/legacy/bin/arm-elf-ld --version | head -1 | grep -F 'GNU ld 2.10'
 
-      - name: Detect private full-build inputs
+      - name: Detect Google Drive build inputs
         id: private_inputs
         env:
-          KHCOM_US_ROM_URL: ${{ secrets.KHCOM_US_ROM_URL }}
-          KHCOM_ANDROID_KEYSTORE_B64: ${{ secrets.KHCOM_ANDROID_KEYSTORE_B64 }}
+          KHCOM_GDRIVE_ROM_URL: ${{ secrets.KHCOM_GDRIVE_ROM_URL }}
+          KHCOM_GDRIVE_KEYSTORE_URL: ${{ secrets.KHCOM_GDRIVE_KEYSTORE_URL }}
         run: |
           set -euo pipefail
-          if [ -n "$KHCOM_US_ROM_URL" ] && [ -n "$KHCOM_ANDROID_KEYSTORE_B64" ]; then
+          if [ -n "$KHCOM_GDRIVE_ROM_URL" ] && [ -n "$KHCOM_GDRIVE_KEYSTORE_URL" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Public toolchain verified. Full APK build skipped because KHCOM_US_ROM_URL and/or KHCOM_ANDROID_KEYSTORE_B64 is not configured."
+            echo "::notice::Public toolchain verified. Full APK build skipped until KHCOM_GDRIVE_ROM_URL and KHCOM_GDRIVE_KEYSTORE_URL are configured as Actions secrets."
           fi
 
-      - name: Download and verify private US ROM
+      - name: Download and verify US ROM from Google Drive
         if: steps.private_inputs.outputs.available == 'true'
         env:
-          KHCOM_US_ROM_URL: ${{ secrets.KHCOM_US_ROM_URL }}
+          KHCOM_GDRIVE_ROM_URL: ${{ secrets.KHCOM_GDRIVE_ROM_URL }}
         run: |
-          set -euxo pipefail
-          curl --fail --location --retry 3 "$KHCOM_US_ROM_URL" -o "$RUNNER_TEMP/B8CE.gba"
+          set -euo pipefail
+          python3 -m gdown --fuzzy "$KHCOM_GDRIVE_ROM_URL" -O "$RUNNER_TEMP/B8CE.gba"
           echo "10729bd884f8fdca7a310b6d606c52e46657aa48  $RUNNER_TEMP/B8CE.gba" | sha1sum -c -
 
-      - name: Restore update signing key
+      - name: Download and verify update signing key from Google Drive
         if: steps.private_inputs.outputs.available == 'true'
         env:
-          KHCOM_ANDROID_KEYSTORE_B64: ${{ secrets.KHCOM_ANDROID_KEYSTORE_B64 }}
+          KHCOM_GDRIVE_KEYSTORE_URL: ${{ secrets.KHCOM_GDRIVE_KEYSTORE_URL }}
         run: |
-          set -euxo pipefail
-          printf '%s' "$KHCOM_ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/khcom-update.keystore"
+          set -euo pipefail
+          python3 -m gdown --fuzzy "$KHCOM_GDRIVE_KEYSTORE_URL" -O "$RUNNER_TEMP/khcom-update.keystore"
+          echo "0268099e927c0f00284e54279fb315dd5944c68502eb699046562e11241d9c1e  $RUNNER_TEMP/khcom-update.keystore" | sha256sum -c -
           chmod 600 "$RUNNER_TEMP/khcom-update.keystore"
 
       - name: Set up Gradle
