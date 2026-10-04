@@ -12,6 +12,7 @@ import android.view.MotionEvent;
 import android.view.View;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 final class GameView extends View {
     private static final int GBA_A = 0x0001;
@@ -24,11 +25,12 @@ final class GameView extends View {
     private static final int GBA_DOWN = 0x0080;
     private static final int GBA_R = 0x0100;
     private static final int GBA_L = 0x0200;
+    private static final int FRAME_BYTES = 240 * 160 * 4;
 
     private final Bitmap bitmap = Bitmap.createBitmap(240, 160, Bitmap.Config.ARGB_8888);
     private final Paint paint = new Paint();
     private final Rect dest = new Rect();
-    private final ByteBuffer frame = NativeBridge.nativeOrderFrameBuffer();
+    private final ByteBuffer frame = ByteBuffer.allocateDirect(FRAME_BYTES).order(ByteOrder.nativeOrder());
 
     private int digitalKeys;
     private int axisKeys;
@@ -48,8 +50,8 @@ final class GameView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
 
-        int frameNumber = NativeBridge.frameCounter();
-        if (frame != null && frameNumber != lastFrame) {
+        int frameNumber = NativeBridge.copyFrame(frame, lastFrame);
+        if (frameNumber != lastFrame) {
             frame.position(0);
             bitmap.copyPixelsFromBuffer(frame);
             lastFrame = frameNumber;
@@ -88,6 +90,20 @@ final class GameView extends View {
         }
     }
 
+    private static boolean isControllerSource(KeyEvent event) {
+        int source = event.getSource();
+        return (source & (InputDevice.SOURCE_GAMEPAD |
+                          InputDevice.SOURCE_JOYSTICK |
+                          InputDevice.SOURCE_DPAD)) != 0;
+    }
+
+    private static void logDiagnosticKey(int keyCode, KeyEvent event, int gbaKey) {
+        if (gbaKey == GBA_START || gbaKey == GBA_SELECT ||
+            (gbaKey == 0 && isControllerSource(event))) {
+            NativeBridge.logKeyEvent(event.getAction(), keyCode, event.getScanCode());
+        }
+    }
+
     private void pushKeys() {
         NativeBridge.setKeys(digitalKeys | axisKeys);
     }
@@ -95,6 +111,7 @@ final class GameView extends View {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         int key = gbaKeyForAndroid(keyCode);
+        logDiagnosticKey(keyCode, event, key);
         if (key == 0) {
             return super.onKeyDown(keyCode, event);
         }
@@ -106,6 +123,7 @@ final class GameView extends View {
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         int key = gbaKeyForAndroid(keyCode);
+        logDiagnosticKey(keyCode, event, key);
         if (key == 0) {
             return super.onKeyUp(keyCode, event);
         }

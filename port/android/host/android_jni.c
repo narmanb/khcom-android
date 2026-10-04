@@ -88,22 +88,31 @@ Java_com_narmanb_khcomandroid_NativeBridge_start(
     return NULL;
 }
 
-JNIEXPORT jobject JNICALL
-Java_com_narmanb_khcomandroid_NativeBridge_frameBuffer(
-    JNIEnv* env, jclass clazz) {
+JNIEXPORT jint JNICALL
+Java_com_narmanb_khcomandroid_NativeBridge_copyFrame(
+    JNIEnv* env, jclass clazz, jobject buffer, jint lastFrame) {
+    void* dst;
+    jlong capacity;
+
     (void)clazz;
-    return (*env)->NewDirectByteBuffer(
-        env,
-        (void*)AndroidHostGetFrame(),
-        (jlong)(240 * 160 * 4));
+    if (buffer == NULL) {
+        return lastFrame;
+    }
+    dst = (*env)->GetDirectBufferAddress(env, buffer);
+    capacity = (*env)->GetDirectBufferCapacity(env, buffer);
+    if (dst == NULL || capacity < (jlong)(240 * 160 * 4)) {
+        return lastFrame;
+    }
+    return (jint)AndroidHostCopyFrame((uint32_t*)dst, (uint32_t)lastFrame);
 }
 
-JNIEXPORT jint JNICALL
-Java_com_narmanb_khcomandroid_NativeBridge_frameCounter(
-    JNIEnv* env, jclass clazz) {
+JNIEXPORT void JNICALL
+Java_com_narmanb_khcomandroid_NativeBridge_logKeyEvent(
+    JNIEnv* env, jclass clazz, jint action, jint keyCode, jint scanCode) {
     (void)env;
     (void)clazz;
-    return (jint)AndroidHostGetFrameCounter();
+    PortLog("input event: action=%d keyCode=%d scanCode=%d",
+            (int)action, (int)keyCode, (int)scanCode);
 }
 
 JNIEXPORT void JNICALL

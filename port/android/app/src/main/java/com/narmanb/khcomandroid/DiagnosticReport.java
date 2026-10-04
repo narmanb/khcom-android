@@ -62,7 +62,7 @@ final class DiagnosticReport {
     }
 
     static String capture(Context context) {
-        StringBuilder text = new StringBuilder("KHCoM Android test1 diagnostics\n");
+        StringBuilder text = new StringBuilder("KHCoM Android test2 diagnostics\n");
         text.append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
             .append("\nAndroid: ").append(Build.VERSION.RELEASE)
             .append(" API ").append(Build.VERSION.SDK_INT)

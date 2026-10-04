@@ -28,6 +28,9 @@
 #include "util.h"
 #include "movie_subtitle_text.h"
 #include "movies.h"
+#ifdef PLATFORM_ANDROID
+#include "port.h"
+#endif
 
 static vu16 sMovieModeState;
 static s32 sMovieId;
@@ -388,6 +391,16 @@ s32 HandleMovieFrame(s32 arg) {
         sMovieFlags |= MOVIE_FLAG_SOFT_RESET;
         return 1;
     }
+
+#ifdef PLATFORM_ANDROID
+    /* The movie player already treats a non-zero callback result as a clean
+     * end-of-playback request. Limit Start-to-skip to the opening movie and
+     * suppress it until physical release so it cannot leak into the next mode. */
+    if (sMovieId == 1 && (keys & START_BUTTON) != 0) {
+        PortSuppressKeys(START_BUTTON);
+        return 1;
+    }
+#endif
 
     if (sMovieSubs != NULL) {
         for (i = 0; i < 2; i++) {

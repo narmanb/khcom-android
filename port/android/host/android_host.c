@@ -31,9 +31,15 @@
 #define AUDIO_TARGET_FILL 2048
 
 static PpuFrame sFrame;
-static uint32_t sRgba[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
-static volatile uint16_t sKeys;
-static volatile uint32_t sFrameCounter;
+static uint32_t sRenderRgba[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
+static uint32_t sPublishedRgba[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
+static uint32_t sFrameCounter;
+
+static pthread_mutex_t sFrameMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t sInputMutex = PTHREAD_MUTEX_INITIALIZER;
+static uint16_t sKeys;
+static uint16_t sPressedLatch;
+static uint16_t sSuppressedKeys;
 
 static pthread_mutex_t sPauseMutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t sPauseCond = PTHREAD_COND_INITIALIZER;
@@ -89,10 +95,22 @@ static int16_t Clamp16(int value) {
 void AndroidHostSetKeys(uint16_t keys) {
     uint16_t pressed = keys & 0x03FFu;
 
+    pthread_mutex_lock(&sInputMutex);
+    /* Keep newly pressed buttons pending until the emulated game samples them.
+     * Android can deliver a complete down/up pair between two 60 Hz frames. */
+    sSuppressedKeys &= pressed;
+    sPressedLatch |= (uint16_t)(pressed & ~sKeys & ~sSuppressedKeys);
     sKeys = pressed;
-    /* Let UpdateKeyState() see host input immediately instead of waiting for
-     * the following PortVBlankWait() to refresh KEYINPUT. */
-    *(volatile uint16_t*)&gGbaIo[0x130] = (uint16_t)(~pressed) & 0x03FFu;
+    pthread_mutex_unlock(&sInputMutex);
+}
+
+void PortSuppressKeys(uint16_t keys) {
+    pthread_mutex_lock(&sInputMutex);
+    /* Only a key that is still physically held needs release suppression.
+     * A latched tap may already have been released before the game saw it. */
+    sSuppressedKeys |= (uint16_t)(keys & sKeys & 0x03FFu);
+    sPressedLatch &= (uint16_t)~keys;
+    pthread_mutex_unlock(&sInputMutex);
 }
 
 void AndroidHostSetPaused(int paused) {
@@ -193,12 +211,16 @@ void AndroidHostFlushSram(void) {
     sSramFlushFrames = 0;
 }
 
-const uint32_t* AndroidHostGetFrame(void) {
-    return sRgba;
-}
+uint32_t AndroidHostCopyFrame(uint32_t* dst, uint32_t lastFrame) {
+    uint32_t current;
 
-uint32_t AndroidHostGetFrameCounter(void) {
-    return sFrameCounter;
+    pthread_mutex_lock(&sFrameMutex);
+    current = sFrameCounter;
+    if (dst != NULL && current != lastFrame) {
+        memcpy(dst, sPublishedRgba, sizeof(sPublishedRgba));
+    }
+    pthread_mutex_unlock(&sFrameMutex);
+    return current;
 }
 
 void PortCaptureLine(int y) {
@@ -225,9 +247,16 @@ void PortVBlankWait(void) {
     }
     pthread_mutex_unlock(&sPauseMutex);
 
-    PpuSetOutput(sRgba, GBA_SCREEN_WIDTH, GBA_SCREEN_WIDTH);
+    PpuSetOutput(sRenderRgba, GBA_SCREEN_WIDTH, GBA_SCREEN_WIDTH);
     PpuRenderFrame(&sFrame);
+
+    /* Publish only a complete frame. Java copies the published buffer while
+     * holding the same short-lived mutex, and rendering continues into the
+     * separate producer buffer. */
+    pthread_mutex_lock(&sFrameMutex);
+    memcpy(sPublishedRgba, sRenderRgba, sizeof(sPublishedRgba));
     sFrameCounter++;
+    pthread_mutex_unlock(&sFrameMutex);
     if (sFrameCounter == 1) PortLog("first rendered frame submitted");
 
     now = MonotonicNs();
@@ -244,7 +273,13 @@ void PortVBlankWait(void) {
 }
 
 uint16_t PortReadKeys(void) {
-    return sKeys;
+    uint16_t keys;
+
+    pthread_mutex_lock(&sInputMutex);
+    keys = (uint16_t)((sKeys | sPressedLatch) & ~sSuppressedKeys);
+    sPressedLatch = 0;
+    pthread_mutex_unlock(&sInputMutex);
+    return keys;
 }
 
 void PortSramWritten(void) {

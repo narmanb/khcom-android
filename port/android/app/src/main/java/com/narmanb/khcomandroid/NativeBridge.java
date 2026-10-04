@@ -1,7 +1,6 @@
 package com.narmanb.khcomandroid;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 final class NativeBridge {
     static {
@@ -11,19 +10,12 @@ final class NativeBridge {
     private NativeBridge() {}
 
     static native String start(String romPath, byte[] romMap);
-    static native ByteBuffer frameBuffer();
-    static native int frameCounter();
+    static native int copyFrame(ByteBuffer target, int lastFrame);
     static native void setKeys(int keys);
+    static native void logKeyEvent(int action, int keyCode, int scanCode);
     static native boolean isStarted();
     static native void flushSave();
     static native int readAudio(short[] output, int frames);
     static native void setPaused(boolean paused);
 
-    static ByteBuffer nativeOrderFrameBuffer() {
-        ByteBuffer buffer = frameBuffer();
-        if (buffer != null) {
-            buffer.order(ByteOrder.nativeOrder());
-        }
-        return buffer;
-    }
 }

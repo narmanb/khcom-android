@@ -14,8 +14,7 @@ void AndroidHostFlushSram(void);
 /* Pull fixed-rate 48 kHz stereo signed-16 frames for Android AudioTrack. */
 int AndroidHostReadAudio(int16_t* out, int frames);
 
-/* Latest rendered 240x160 RGBA8888 frame. Owned by the host. */
-const uint32_t* AndroidHostGetFrame(void);
-uint32_t AndroidHostGetFrameCounter(void);
+/* Copy the latest complete 240x160 RGBA8888 frame when it changed. */
+uint32_t AndroidHostCopyFrame(uint32_t* dst, uint32_t lastFrame);
 
 #endif

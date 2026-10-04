@@ -26,6 +26,7 @@ void PortCaptureLine(int y);
 void PortCaptureSubmit(void);
 void PortVBlankWait(void);
 uint16_t PortReadKeys(void);
+void PortSuppressKeys(uint16_t keys);
 void PortSoftReset(void) __attribute__((noreturn));
 void PortLog(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 void PortFatal(const char* fmt, ...) __attribute__((format(printf, 1, 2), noreturn));
