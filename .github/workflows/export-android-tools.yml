@@ -71,12 +71,35 @@ jobs:
 
           tar -C "$STAGE" -I 'zstd -3 -T0' -cf "$RUNNER_TEMP/khcom-android-tools.tar.zst" .
           ls -lh "$RUNNER_TEMP/khcom-android-tools.tar.zst"
+          split -b 240M -d -a 1 "$RUNNER_TEMP/khcom-android-tools.tar.zst" "$RUNNER_TEMP/android-tools.part-"
+          test -f "$RUNNER_TEMP/android-tools.part-0"
+          test -f "$RUNNER_TEMP/android-tools.part-1"
+          test -f "$RUNNER_TEMP/android-tools.part-2"
+          ls -lh "$RUNNER_TEMP"/android-tools.part-*
 
-      - name: Upload Android build tools
+      - name: Upload Android tools part 0
         uses: actions/upload-artifact@v4
         with:
-          name: khcom-android-tools
-          path: ${{ runner.temp }}/khcom-android-tools.tar.zst
+          name: khcom-android-tools-part-0
+          path: ${{ runner.temp }}/android-tools.part-0
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Android tools part 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: khcom-android-tools-part-1
+          path: ${{ runner.temp }}/android-tools.part-1
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Android tools part 2
+        uses: actions/upload-artifact@v4
+        with:
+          name: khcom-android-tools-part-2
+          path: ${{ runner.temp }}/android-tools.part-2
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
