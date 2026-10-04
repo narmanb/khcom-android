@@ -1,0 +1,28 @@
+name: Export Android Build Tools 36
+
+on:
+  push:
+    branches:
+      - android-port
+    paths:
+      - .github/workflows/export-build-tools36.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Build Tools 36
+        run: |
+          set -euxo pipefail
+          test -d "$ANDROID_HOME/build-tools/36.0.0"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" version
+          tar -C "$ANDROID_HOME/build-tools" -czf "$RUNNER_TEMP/build-tools-36.0.0.tgz" 36.0.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-build-tools-36.0.0
+          path: ${{ runner.temp }}/build-tools-36.0.0.tgz
+          retention-days: 1
+          compression-level: 0
