@@ -5,12 +5,6 @@ on:
   push:
     branches:
       - android-port
-    paths:
-      - .github/workflows/android-build.yml
-      - tools/android/build_android_from_rom.sh
-      - tools/setup_legacy_toolchain.py
-      - tools/fetch_gbagfx.sh
-      - port/android/app/build.gradle
 
 permissions:
   contents: read
