@@ -295,7 +295,11 @@ void HandleSoraCardInput() {
         }
     }
 
+#ifdef PLATFORM_ANDROID
     if ((GetKeysPressed() & A_BUTTON) && IsSoraReloadCardSelected() == 0) {
+#else
+    if (GetKeysPressed() & A_BUTTON) {
+#endif
         RequestSoraCardUse();
 
         if (GetSoraCardListIndex() == 3) {
@@ -521,7 +525,11 @@ void HandleTutorialCardInput() {
     }
 
     if (!(gBtlWork->flags & BTL_FLAG_TUTORIAL_NO_CARD_USE)) {
+#ifdef PLATFORM_ANDROID
         if ((pressed & A_BUTTON) && IsSoraReloadCardSelected() == 0) {
+#else
+        if (pressed & A_BUTTON) {
+#endif
             RequestSoraCardUse();
         }
     }
