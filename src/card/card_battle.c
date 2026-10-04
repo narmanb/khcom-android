@@ -755,9 +755,13 @@ s32 cardbattleSora_1(CardBattleWork* w, Task* task) {
             }
 #endif
 
+#ifdef PLATFORM_ANDROID
             if (!(sSoraSelectedCard->flags & CARD_DISP_FLAG_RELOAD_CARD) &&
                 sSoraSelectedCard->cardDef != NULL &&
                 sSoraSelectedCard->cardDef->category != 3) {
+#else
+            if (sSoraSelectedCard->cardDef->category != 3 && !(sSoraSelectedCard->flags & CARD_DISP_FLAG_RELOAD_CARD)) {
+#endif
                 if (w->reloadPending[w->listIndex] == 0) {
                     if (sSoraSelectedCard->cardDef->flags & CARD_DEF_FLAG_GIMMICK) {
                         UseSoraGimmickCard(w);
@@ -771,9 +775,13 @@ s32 cardbattleSora_1(CardBattleWork* w, Task* task) {
                         m4aSongNumStart(SONG_SYS_BEEP);
                     }
                 }
+#ifdef PLATFORM_ANDROID
             } else if (!(sSoraSelectedCard->flags & CARD_DISP_FLAG_RELOAD_CARD) &&
                        sSoraSelectedCard->cardDef != NULL &&
                        sSoraSelectedCard->cardDef->category == 3) {
+#else
+            } else if (sSoraSelectedCard->cardDef->category == 3 && !(sSoraSelectedCard->flags & CARD_DISP_FLAG_RELOAD_CARD)) {
+#endif
                 UseSoraHeartlessCard(w);
             } else if (gGameState.flags & GAME_FLAG_RIKU) {
                 RemoveSoraCardDisplays(w);
