@@ -9,8 +9,21 @@ NDK_ROOT="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
 OUTPUT="$ROOT/KHCoM-Android-RP5-sourcebuild.apk"
 KEYSTORE="${KHCOM_SIGNING_STORE_FILE:-}"
 BASELINE_APK=""
-VERSION_CODE="${KHCOM_VERSION_CODE:-3}"
-VERSION_NAME="${KHCOM_VERSION_NAME:-0.0.3}"
+if [ -n "${KHCOM_VERSION_CODE:-}" ]; then
+    VERSION_CODE="$KHCOM_VERSION_CODE"
+elif [ -n "${GITHUB_RUN_NUMBER:-}" ]; then
+    VERSION_CODE="$((100000 + GITHUB_RUN_NUMBER))"
+else
+    VERSION_CODE="3"
+fi
+
+if [ -n "${KHCOM_VERSION_NAME:-}" ]; then
+    VERSION_NAME="$KHCOM_VERSION_NAME"
+elif [ -n "${GITHUB_RUN_NUMBER:-}" ]; then
+    VERSION_NAME="0.0.${GITHUB_RUN_NUMBER}"
+else
+    VERSION_NAME="0.0.3"
+fi
 CLEAN=0
 REQUIRE_UPDATE_SIGNING=0
 US_SHA1="10729bd884f8fdca7a310b6d606c52e46657aa48"
@@ -137,10 +150,19 @@ if [ ! -x tools/agbcc/bin/old_agbcc ]; then
     rm -rf "$tmp_agbcc"
 fi
 
-echo "==> Building pinned legacy assembler/linker/runtime from public source"
-python3 tools/setup_legacy_toolchain.py
+if [ -x tools/legacy/bin/arm-elf-as ] \
+   && [ -x tools/legacy/bin/arm-elf-ld ] \
+   && [ -f tools/legacy/lib/libgcc.a ] \
+   && [ -f tools/legacy/lib/libc.a ] \
+   && tools/legacy/bin/arm-elf-as --version | head -1 | grep -Fq 'GNU assembler 2.10' \
+   && tools/legacy/bin/arm-elf-ld --version | head -1 | grep -Fq 'GNU ld 2.10'; then
+    echo "==> Reusing verified cached legacy toolchain"
+else
+    echo "==> Building pinned legacy assembler/linker/runtime from public source"
+    python3 tools/setup_legacy_toolchain.py
+fi
 
-echo "==> Building gbagfx from public pret source"
+echo "==> Building/reusing gbagfx from public pret source"
 sh tools/fetch_gbagfx.sh
 
 mkdir -p roms
