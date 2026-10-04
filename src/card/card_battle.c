@@ -745,7 +745,19 @@ s32 cardbattleSora_1(CardBattleWork* w, Task* task) {
         case 3:
             sSoraCardRequest = 0;
 
-            if (sSoraSelectedCard->cardDef->category != 3 && !(sSoraSelectedCard->flags & CARD_DISP_FLAG_RELOAD_CARD)) {
+#ifdef PLATFORM_ANDROID
+            /* Reload-card displays intentionally have no CardDef. A latched
+             * Android A press can otherwise reach this path and dereference
+             * cardDef->category at NULL + 0x2A. */
+            if (sSoraSelectedCard == NULL) {
+                w->unk_C4[4] = 1;
+                break;
+            }
+#endif
+
+            if (!(sSoraSelectedCard->flags & CARD_DISP_FLAG_RELOAD_CARD) &&
+                sSoraSelectedCard->cardDef != NULL &&
+                sSoraSelectedCard->cardDef->category != 3) {
                 if (w->reloadPending[w->listIndex] == 0) {
                     if (sSoraSelectedCard->cardDef->flags & CARD_DEF_FLAG_GIMMICK) {
                         UseSoraGimmickCard(w);
@@ -759,7 +771,9 @@ s32 cardbattleSora_1(CardBattleWork* w, Task* task) {
                         m4aSongNumStart(SONG_SYS_BEEP);
                     }
                 }
-            } else if (sSoraSelectedCard->cardDef->category == 3 && !(sSoraSelectedCard->flags & CARD_DISP_FLAG_RELOAD_CARD)) {
+            } else if (!(sSoraSelectedCard->flags & CARD_DISP_FLAG_RELOAD_CARD) &&
+                       sSoraSelectedCard->cardDef != NULL &&
+                       sSoraSelectedCard->cardDef->category == 3) {
                 UseSoraHeartlessCard(w);
             } else if (gGameState.flags & GAME_FLAG_RIKU) {
                 RemoveSoraCardDisplays(w);
