@@ -2,8 +2,11 @@ plugins {
     id "com.android.application"
 }
 
-def khcomVersionCode = (System.getenv("KHCOM_VERSION_CODE") ?: "3").toInteger()
-def khcomVersionName = System.getenv("KHCOM_VERSION_NAME") ?: "0.0.3"
+def githubRunNumber = System.getenv("GITHUB_RUN_NUMBER")
+def automaticVersionCode = githubRunNumber ? (100000 + githubRunNumber.toInteger()).toString() : "3"
+def automaticVersionName = githubRunNumber ? "0.0." + githubRunNumber : "0.0.3"
+def khcomVersionCode = (System.getenv("KHCOM_VERSION_CODE") ?: automaticVersionCode).toInteger()
+def khcomVersionName = System.getenv("KHCOM_VERSION_NAME") ?: automaticVersionName
 def khcomSigningStore = System.getenv("KHCOM_SIGNING_STORE_FILE")
 def khcomSigningStorePassword = System.getenv("KHCOM_SIGNING_STORE_PASSWORD") ?: "android"
 def khcomSigningKeyAlias = System.getenv("KHCOM_SIGNING_KEY_ALIAS") ?: "androiddebugkey"
