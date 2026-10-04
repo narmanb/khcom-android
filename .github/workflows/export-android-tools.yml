@@ -1,0 +1,82 @@
+name: Export Android build tools
+
+on:
+  push:
+    branches:
+      - android-port
+    paths:
+      - .github/workflows/export-android-tools.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out Android port
+        uses: actions/checkout@v4
+
+      - name: Locate installed Android tools
+        id: locate
+        run: |
+          set -euxo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -d "$SDK"
+
+          NDK="${ANDROID_NDK_HOME:-}"
+          if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then
+            NDK="$(find "$SDK/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          fi
+          test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+
+          PLATFORM="$SDK/platforms/android-37"
+          if [ ! -f "$PLATFORM/android.jar" ]; then
+            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37"
+          fi
+
+          BUILD_TOOLS="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          test -x "$BUILD_TOOLS/aapt2"
+          test -x "$BUILD_TOOLS/d8"
+          test -x "$BUILD_TOOLS/zipalign"
+          test -x "$BUILD_TOOLS/apksigner"
+
+          echo "sdk=$SDK" >> "$GITHUB_OUTPUT"
+          echo "ndk=$NDK" >> "$GITHUB_OUTPUT"
+          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
+          echo "build_tools=$BUILD_TOOLS" >> "$GITHUB_OUTPUT"
+
+          echo "SDK=$SDK"
+          echo "NDK=$NDK"
+          echo "PLATFORM=$PLATFORM"
+          echo "BUILD_TOOLS=$BUILD_TOOLS"
+
+      - name: Stage minimal Android toolchain
+        run: |
+          set -euxo pipefail
+          STAGE="$RUNNER_TEMP/android-tools"
+          mkdir -p "$STAGE/ndk" "$STAGE/sdk/platforms" "$STAGE/sdk/build-tools"
+
+          NDK="${{ steps.locate.outputs.ndk }}"
+          PLATFORM="${{ steps.locate.outputs.platform }}"
+          BUILD_TOOLS="${{ steps.locate.outputs.build_tools }}"
+
+          cp -a "$NDK/toolchains" "$STAGE/ndk/"
+          cp -a "$NDK/source.properties" "$STAGE/ndk/" || true
+          cp -a "$PLATFORM" "$STAGE/sdk/platforms/"
+          cp -a "$BUILD_TOOLS" "$STAGE/sdk/build-tools/"
+
+          tar -C "$STAGE" -I 'zstd -3 -T0' -cf "$RUNNER_TEMP/khcom-android-tools.tar.zst" .
+          ls -lh "$RUNNER_TEMP/khcom-android-tools.tar.zst"
+
+      - name: Upload Android build tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: khcom-android-tools
+          path: ${{ runner.temp }}/khcom-android-tools.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
