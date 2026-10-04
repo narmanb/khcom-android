@@ -2,6 +2,13 @@ plugins {
     id "com.android.application"
 }
 
+def khcomVersionCode = (System.getenv("KHCOM_VERSION_CODE") ?: "3").toInteger()
+def khcomVersionName = System.getenv("KHCOM_VERSION_NAME") ?: "0.0.3"
+def khcomSigningStore = System.getenv("KHCOM_SIGNING_STORE_FILE")
+def khcomSigningStorePassword = System.getenv("KHCOM_SIGNING_STORE_PASSWORD") ?: "android"
+def khcomSigningKeyAlias = System.getenv("KHCOM_SIGNING_KEY_ALIAS") ?: "androiddebugkey"
+def khcomSigningKeyPassword = System.getenv("KHCOM_SIGNING_KEY_PASSWORD") ?: "android"
+
 android {
     namespace "com.narmanb.khcomandroid"
     compileSdk 36
@@ -10,11 +17,32 @@ android {
         applicationId "com.narmanb.khcomandroid"
         minSdk 23
         targetSdk 36
-        versionCode 3
-        versionName "0.0.3"
+        versionCode khcomVersionCode
+        versionName khcomVersionName
 
         ndk {
             abiFilters "armeabi-v7a"
+        }
+    }
+
+    // Keep signing material out of git. When a preserved keystore is supplied,
+    // debug APKs use it so test builds remain update-compatible with one another.
+    signingConfigs {
+        khcomUpdate {
+            if (khcomSigningStore) {
+                storeFile file(khcomSigningStore)
+                storePassword khcomSigningStorePassword
+                keyAlias khcomSigningKeyAlias
+                keyPassword khcomSigningKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            if (khcomSigningStore) {
+                signingConfig signingConfigs.khcomUpdate
+            }
         }
     }
 
