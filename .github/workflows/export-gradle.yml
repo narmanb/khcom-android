@@ -1,0 +1,33 @@
+name: Export Gradle 9.6
+
+on:
+  push:
+    branches:
+      - android-port
+    paths:
+      - .github/workflows/export-gradle.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Gradle 9.6
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Package Gradle installation
+        run: |
+          set -euxo pipefail
+          GRADLE_BIN="$(readlink -f "$(command -v gradle)")"
+          GRADLE_HOME="$(dirname "$(dirname "$GRADLE_BIN")")"
+          gradle --version
+          tar -C "$(dirname "$GRADLE_HOME")" -czf gradle-9.6.0.tgz "$(basename "$GRADLE_HOME")"
+      - name: Upload Gradle
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-9.6.0
+          path: gradle-9.6.0.tgz
+          retention-days: 1
