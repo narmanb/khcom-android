@@ -1,0 +1,80 @@
+name: Export GBA build tools
+
+on:
+  push:
+    branches:
+      - android-port
+    paths:
+      - .github/workflows/export-gba-tools.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out Android port
+        uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends             build-essential flex bison libpng-dev pkg-config             binutils-arm-none-eabi
+
+      - name: Build and install pinned agbcc
+        run: |
+          set -euxo pipefail
+          git clone https://github.com/pret/agbcc.git "$RUNNER_TEMP/agbcc"
+          git -C "$RUNNER_TEMP/agbcc" checkout da598c1d918402c42c0c0d7128ba14567f3175e9
+          (
+            cd "$RUNNER_TEMP/agbcc"
+            ./build.sh
+            ./install.sh "$GITHUB_WORKSPACE"
+          )
+          test -x tools/agbcc/bin/old_agbcc
+
+      - name: Build pinned legacy GBA toolchain
+        run: |
+          set -euxo pipefail
+          python3 tools/setup_legacy_toolchain.py
+          test -x tools/legacy/bin/arm-elf-as
+          test -x tools/legacy/bin/arm-elf-ld
+          test -f tools/legacy/lib/libgcc.a
+          test -f tools/legacy/lib/libc.a
+
+      - name: Build gbagfx
+        run: |
+          set -euxo pipefail
+          sh tools/fetch_gbagfx.sh
+          test -x tools/gbagfx/gbagfx
+
+      - name: Collect modern ARM binutils
+        run: |
+          set -euxo pipefail
+          mkdir -p tools/host-binutils
+          for tool in /usr/bin/arm-none-eabi-*; do
+            if [ -f "$tool" ] && [ -x "$tool" ]; then
+              cp -a "$tool" tools/host-binutils/
+            fi
+          done
+          test -x tools/host-binutils/arm-none-eabi-nm
+          test -x tools/host-binutils/arm-none-eabi-readelf
+          test -x tools/host-binutils/arm-none-eabi-cpp
+
+      - name: Archive build tools
+        run: |
+          tar -C "$GITHUB_WORKSPACE" -caf "$RUNNER_TEMP/khcom-gba-tools.tar.zst"             tools/agbcc             tools/legacy             tools/gbagfx/gbagfx             tools/host-binutils
+          ls -lh "$RUNNER_TEMP/khcom-gba-tools.tar.zst"
+
+      - name: Upload build tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: khcom-gba-tools
+          path: ${{ runner.temp }}/khcom-gba-tools.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
