@@ -21,14 +21,13 @@ jobs:
           fetch-depth: 1
 
       - name: Archive source tree
-        run: |
-          tar             --exclude=.git             --exclude='build*'             --exclude=roms             -czf khcom-android-source.tar.gz .
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/khcom-android-source.tar.gz" HEAD
 
       - name: Upload source archive
         uses: actions/upload-artifact@v4
         with:
           name: khcom-android-source
-          path: khcom-android-source.tar.gz
+          path: ${{ runner.temp }}/khcom-android-source.tar.gz
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
