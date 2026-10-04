@@ -238,7 +238,7 @@ public final class MainActivity extends Activity {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_TITLE, "KHCoM-test2-diagnostics.txt");
+        intent.putExtra(Intent.EXTRA_TITLE, "KHCoM-test5-diagnostics.txt");
         startActivityForResult(intent, SAVE_REPORT);
     }
 
