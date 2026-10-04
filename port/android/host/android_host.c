@@ -8,6 +8,7 @@
 #include "port.h"
 #include "ppu.h"
 #include "android_host.h"
+#include "android_diagnostics.h"
 
 #include <android/log.h>
 #include <errno.h>
@@ -227,6 +228,7 @@ void PortVBlankWait(void) {
     PpuSetOutput(sRgba, GBA_SCREEN_WIDTH, GBA_SCREEN_WIDTH);
     PpuRenderFrame(&sFrame);
     sFrameCounter++;
+    if (sFrameCounter == 1) PortLog("first rendered frame submitted");
 
     now = MonotonicNs();
     if (sNextFrameNs == 0 || now - sNextFrameNs > FRAME_NS * 4) {
@@ -392,6 +394,7 @@ void PortLog(const char* fmt, ...) {
     vsnprintf(buffer, sizeof(buffer), fmt, ap);
     va_end(ap);
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "%s", buffer);
+    AndroidDiagnosticsLog(buffer);
 }
 
 void PortFatal(const char* fmt, ...) {
@@ -402,6 +405,8 @@ void PortFatal(const char* fmt, ...) {
     vsnprintf(buffer, sizeof(buffer), fmt, ap);
     va_end(ap);
     __android_log_print(ANDROID_LOG_FATAL, LOG_TAG, "%s", buffer);
+    AndroidDiagnosticsLog("FATAL native abort");
+    AndroidDiagnosticsLog(buffer);
     abort();
 }
 

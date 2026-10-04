@@ -19,12 +19,17 @@ add_library(khcom_android_platform STATIC
     host/ppu.c
     host/psg.c
     host/android_host.c
+    host/android_diagnostics.c
 )
 
 target_include_directories(khcom_android_platform
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+# Quoted game headers must not shadow Bionic's angle-bracket malloc.h.
+target_compile_options(khcom_android_platform PUBLIC
+    "SHELL:-iquote ${CMAKE_CURRENT_SOURCE_DIR}/../../include"
 )
 
 target_compile_definitions(khcom_android_platform PUBLIC
@@ -34,7 +39,6 @@ target_compile_definitions(khcom_android_platform PUBLIC
 target_compile_features(khcom_android_platform PRIVATE c_std_11)
 
 target_compile_options(khcom_android_platform PRIVATE
-    -include ${CMAKE_CURRENT_SOURCE_DIR}/include/android_game_abi.h
     -Wall
     -Wextra
     -Wpedantic
@@ -42,9 +46,16 @@ target_compile_options(khcom_android_platform PRIVATE
     -fwrapv
 )
 
+set_source_files_properties(
+    game/abi_probe.c game/gba_memory.c game/gba_system.c game/m4a_port.c
+    PROPERTIES COMPILE_OPTIONS
+    "-mthumb;-include;${CMAKE_CURRENT_SOURCE_DIR}/include/android_game_abi.h"
+)
+
 target_link_libraries(khcom_android_platform PUBLIC
     m
     log
+    dl
 )
 
 set_target_properties(khcom_android_platform PROPERTIES

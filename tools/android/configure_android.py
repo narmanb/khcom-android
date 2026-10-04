@@ -58,6 +58,8 @@ HW_REGIONS = [
 
 GAME_CFLAGS = [
     "-std=gnu89",
+    # The raw GBA-address fallback decodes Thumb/Thumb-2 instructions.
+    "-mthumb",
     "-O2",
     "-g",
     "-fPIC",
@@ -453,13 +455,15 @@ def main():
         GAME_CFLAGS
         + ["-include", "port/android/include/android_game_abi.h"]
         + defines
-        + [f"-I{path}" for path in include_dirs]
-        + [f"-I{gba_build}/gen", "-Iport/android/include"]
+        # The game's malloc.h must not shadow Bionic's <malloc.h>, which
+        # <stdlib.h> includes to declare malloc/free. Game headers use quotes.
+        + [f"-iquote{path}" for path in include_dirs]
+        + [f"-iquote{gba_build}/gen", "-iquoteport/android/include"]
     )
     port_cflags = (
         PORT_CFLAGS
         + defines
-        + ["-Iinclude", "-Iport/android/include"]
+        + ["-iquoteinclude", "-iquoteport/android/include"]
     )
 
     manifests = sorted(os.path.relpath(group["manifest"].path) for group in groups.values())
@@ -498,7 +502,8 @@ def main():
         n.rule(
             "cc_game_rom",
             "$cc --target=$target $game_cflags $extra -MMD -MF $out.d -c $in -o $out && "
-            "$objcopy --rename-section .rodata=.gamerodata,alloc,load,contents,data $out",
+            "$objcopy --rename-section .rodata=.gamerodata,alloc,load,contents,data "
+            "--rename-section .data.rel.ro=.gamerelro,alloc,load,contents,data $out",
             depfile="$out.d",
             deps="gcc",
             description="CCROM $out",
@@ -512,7 +517,8 @@ def main():
         )
         n.rule(
             "as",
-            "$cc --target=$target -fPIC -I. -Iinclude -c $in -o $out",
+            "$cc --target=$target -fPIC -Wa,-defsym,PLATFORM_ANDROID=1 "
+            "-I. -Iinclude -c $in -o $out",
             description="AS $out",
         )
         rename = " ".join(
@@ -542,7 +548,7 @@ def main():
             "$cc --target=$target -shared -fPIC "
             "-Wl,-soname,libkhcom.so -Wl,-Bsymbolic -Wl,--emit-relocs "
             "-Wl,--no-undefined -Wl,-Map=$out.map "
-            "-o $out @$out.rsp -llog -landroid -lm",
+            "-o $out @$out.rsp -llog -landroid -ldl -lm",
             rspfile="$out.rsp",
             rspfile_content="$in",
             description="LINK $out",
@@ -553,6 +559,11 @@ def main():
             "--readelf $readelf --nm $nm --gba-readelf $gbareadelf "
             "$in $in.map $gbamap $rom $out $rommap gGbaIo $gbaelf",
             description="STRIPROM $out",
+        )
+        n.rule(
+            "strip_debug",
+            "$objcopy --strip-unneeded $in $out",
+            description="STRIPSYMS $out",
         )
         n.rule(
             "audit_rom",
@@ -661,9 +672,10 @@ def main():
         jni_dir.mkdir(parents=True, exist_ok=True)
         asset_dir.mkdir(parents=True, exist_ok=True)
         stripped = str(jni_dir / "libkhcom.so")
+        romfree_debug = str(out_dir / "libkhcom.romfree-debug.so")
         rommap = str(asset_dir / "rommap.bin")
         n.build(
-            stripped,
+            romfree_debug,
             "strip_rom",
             unstripped,
             implicit=[
@@ -681,6 +693,7 @@ def main():
                 "gbareadelf": f"{prefix}readelf",
             },
         )
+        n.build(stripped, "strip_debug", romfree_debug)
 
         audit = str(package_dir / "rom_audit.txt")
         n.build(

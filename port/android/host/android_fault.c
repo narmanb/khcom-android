@@ -12,6 +12,7 @@
  */
 #include "android_fault.h"
 #include "android_gba_memory.h"
+#include "android_diagnostics.h"
 
 #include <signal.h>
 #include <stdint.h>
@@ -405,10 +406,14 @@ static void SegvHandler(int sig, siginfo_t* info, void* context) {
     uint32_t fault = (uint32_t)(uintptr_t)info->si_addr;
     uint32_t pc;
     int len;
+    uint32_t regs[16];
+    int i;
 
     if (sig != SIGSEGV ||
         !(m->arm_cpsr & CPSR_THUMB) ||
         !IsMappedGbaAddress(fault)) {
+        for (i=0; i<16; i++) regs[i] = ReadReg(m, i);
+        AndroidDiagnosticsFault(fault, regs, (uint32_t)m->arm_cpsr);
         ChainOrCrash(sig, info, context);
         return;
     }
@@ -416,6 +421,8 @@ static void SegvHandler(int sig, siginfo_t* info, void* context) {
     pc = (uint32_t)m->arm_pc;
     len = EmulateThumb(m);
     if (len == 0) {
+        for (i=0; i<16; i++) regs[i] = ReadReg(m, i);
+        AndroidDiagnosticsFault(fault, regs, (uint32_t)m->arm_cpsr);
         ChainOrCrash(sig, info, context);
         return;
     }

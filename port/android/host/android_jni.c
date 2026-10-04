@@ -6,6 +6,8 @@
 #include "android_fault.h"
 #include "android_host.h"
 #include "android_rom.h"
+#include "android_diagnostics.h"
+#include "port.h"
 
 void AgbMain(void);
 
@@ -13,7 +15,9 @@ static int sStarted;
 
 static void* GameThread(void* unused) {
     (void)unused;
+    PortLog("entering AgbMain");
     AgbMain();
+    PortFatal("AgbMain returned unexpectedly");
     return NULL;
 }
 
@@ -48,6 +52,8 @@ Java_com_narmanb_khcomandroid_NativeBridge_start(
         return (*env)->NewStringUTF(env, "Could not read rommap.bin");
     }
 
+    AndroidDiagnosticsInit(path);
+    PortLog("starting ROM verification and restoration; rommap bytes=%d", mapSize);
     error[0] = '\0';
     if (!AndroidHostInitSram(path, error, sizeof(error))) {
         (*env)->ReleaseByteArrayElements(env, mapBytes, map, JNI_ABORT);
@@ -56,6 +62,7 @@ Java_com_narmanb_khcomandroid_NativeBridge_start(
             env, error[0] != '\0' ? error : "Could not initialize save data");
     }
     if (!AndroidRomLoad(path, map, (size_t)mapSize, error, sizeof(error))) {
+        PortLog("ROM initialization failed: %s", error);
         (*env)->ReleaseByteArrayElements(env, mapBytes, map, JNI_ABORT);
         (*env)->ReleaseStringUTFChars(env, romPath, path);
         return (*env)->NewStringUTF(
@@ -64,6 +71,8 @@ Java_com_narmanb_khcomandroid_NativeBridge_start(
 
     (*env)->ReleaseByteArrayElements(env, mapBytes, map, JNI_ABORT);
     (*env)->ReleaseStringUTFChars(env, romPath, path);
+
+    PortLog("ROM verified and restored; installing fault handler");
 
     if (!AndroidFaultInit()) {
         return (*env)->NewStringUTF(

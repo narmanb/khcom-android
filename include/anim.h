@@ -11,6 +11,12 @@ typedef struct AnimDef {
     u8 unk_0D[0x03];
 } AnimDef;
 
+#if defined(PLATFORM_ANDROID) && defined(__clang__)
+/* These on-ROM records explicitly override the default GBA record boundary. */
+#pragma push_macro("struct")
+#undef struct
+#endif
+
 typedef struct AnimFrame {
     u16 gfxIndex;
     u16 duration;
@@ -25,6 +31,10 @@ typedef struct AnimHeader {
 
 typedef char AnimHeader_size[(sizeof(AnimHeader) == 6) ? 1 : -1];
 typedef char AnimFrame_size[(sizeof(AnimFrame) == 4) ? 1 : -1];
+
+#if defined(PLATFORM_ANDROID) && defined(__clang__)
+#pragma pop_macro("struct")
+#endif
 
 enum AnimFlag {
     ANIM_FLAG_LOOP = 0x1,

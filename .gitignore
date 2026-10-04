@@ -14,6 +14,13 @@ tools/legacy/
 # Build output
 build/
 build.ninja
+build.android.ninja
+.ninja_lock
+port/android/.gradle/
+port/android/build/
+port/android/app/build/
+port/android/local.properties
+tools/host-binutils/
 .ninja_deps
 .ninja_log
 objdiff.json

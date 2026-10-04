@@ -18,6 +18,14 @@ android {
         }
     }
 
+    // ROM restoration leaves large zero-filled data sections in the library.
+    // Compress it in the APK and let Android extract it at installation.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     sourceSets {
         main {
             jniLibs.srcDirs += [rootProject.file("../../build/android/us/package/jniLibs")]

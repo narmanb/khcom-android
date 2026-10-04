@@ -6,6 +6,7 @@
  * the native Vita/GBA-compatible build contract.
  */
 #include "types.h"
+#include "anim.h"
 
 typedef struct AndroidAbiByteProbe {
     u8 value;
@@ -29,3 +30,5 @@ _Static_assert(sizeof(AndroidAbiUnionProbe) == 4,
                "game unions must use a 4-byte size boundary");
 _Static_assert(_Alignof(AndroidAbiByteProbe) == 4,
                "game structs must be 4-byte aligned");
+_Static_assert(sizeof(AnimHeader) == 6 && _Alignof(AnimHeader) == 2,
+               "explicitly packed ROM animation records retain their layout");

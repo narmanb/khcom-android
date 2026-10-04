@@ -22,7 +22,7 @@ ANDROID_TO_GBA = {
     ".romrodata": ".rodata",
     ".romdata": ".data",
 }
-SYMBOL_SECTIONS = (".gamerodata", ".data")
+SYMBOL_SECTIONS = (".gamerodata", ".gamerelro", ".data")
 MAGIC = b"KHRM"
 FORMAT_VERSION = 1
 
@@ -115,7 +115,13 @@ def reloc_words(data, secs, name):
         rtype = r_info & 0xFF
         if rtype == 40:  # R_ARM_V4BX: instruction annotation, no data patch.
             continue
-        if rtype not in (2, 3, 38):  # ABS32, REL32, TARGET1
+        # LLVM emits explicit relocations for the source-assembled movie
+        # decoder's calls, branches and PC-relative ADD. Preserve each patched
+        # instruction just like a relocated data word; never restore over it.
+        allowed = (2, 3, 38)  # ABS32, REL32, TARGET1
+        if name == ".romtext":
+            allowed += (28, 29, 58)  # CALL, JUMP24, ALU_PC_G0
+        if rtype not in allowed:
             raise SystemExit(
                 f"error: unexpected ARM relocation type {rtype} at {r_offset:08X} in {name}"
             )
@@ -136,9 +142,12 @@ def object_symbols(elf, readelf):
         if size == 0:
             continue
         name = parts[7]
-        if name in seen:
+        value = (int(parts[1], 16), size, int(parts[6]))
+        # A shared library lists exported objects in both .dynsym and .symtab.
+        # Identical entries are one object, not ambiguous local definitions.
+        if name in seen and seen[name] != value:
             dup.add(name)
-        seen[name] = (int(parts[1], 16), size, int(parts[6]))
+        seen[name] = value
 
     return {k: v for k, v in seen.items() if k not in dup}
 

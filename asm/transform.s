@@ -182,11 +182,19 @@ func_08109C68:
 	rsble	r0, r0, #0
 	asr	r0, r0, r1
 	ldr r2, .LSqrtTable
+	.ifdef PLATFORM_ANDROID
+.LSqrtBase:
+	add r2, pc, r2
+	.endif
 	ldrb	r0, [r2, r0]
 	rsble	r0, r0, #0
 	mov	pc, lr
 .LSqrtTable:
+	.ifdef PLATFORM_ANDROID
+	.4byte gUnk_09C43708 - (.LSqrtBase + 8)
+	.else
 	.4byte gUnk_09C43708
+	.endif
 .LDequantize:
 	cmp	r0, #0
 	mul	r2, r0, r0
@@ -275,3 +283,14 @@ func_08109C68:
 	pop	{r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, sl, fp, ip, lr}
 	mov	pc, lr
 	.size func_08109AAC, . - func_08109AAC
+
+	.ifdef PLATFORM_ANDROID
+@ Native callers interwork directly; the GBA Thumb-to-ARM veneers are omitted.
+	.global func_081213C4, func_081213CC, func_081213D4
+	.type func_081213C4, %function
+	.type func_081213CC, %function
+	.type func_081213D4, %function
+	.set func_081213C4, func_08109BE0
+	.set func_081213CC, func_08109AAC
+	.set func_081213D4, func_08109C68
+	.endif
