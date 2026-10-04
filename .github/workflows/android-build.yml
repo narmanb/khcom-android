@@ -1,0 +1,100 @@
+name: Android port build
+
+on:
+  push:
+    branches:
+      - android-port
+    paths:
+      - .github/workflows/android-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out Android port
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build verified US GBA reference
+        run: |
+          docker run --rm             -v "$PWD:/work"             -w /work             ghcr.io/pheenoh/khcom-build:main             bash -lc '
+              set -euxo pipefail
+              git config --global --add safe.directory /work
+              mkdir -p tools roms
+              cp -a /agbcc/tools/agbcc tools/
+              python3 tools/setup_legacy_toolchain.py
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends libpng-dev pkg-config
+              python3 -m pip install --break-system-packages pyyaml pillow || python3 -m pip install pyyaml pillow
+              sh tools/fetch_gbagfx.sh
+              cp /orig/B8CE.gba roms/B8CE.gba
+              echo "10729bd884f8fdca7a310b6d606c52e46657aa48  roms/B8CE.gba" | sha1sum -c -
+              python3 tools/extract_assets.py us
+              python3 configure.py --version us
+              ninja
+              echo "10729bd884f8fdca7a310b6d606c52e46657aa48  build/us/com_us.gba" | sha1sum -c -
+            '
+          sudo chown -R "$(id -u):$(id -g)" .
+
+      - name: Install Android native build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends binutils-arm-none-eabi
+          python3 -m pip install --user pyyaml pillow
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Locate Android NDK
+        id: ndk
+        run: |
+          set -eux
+          NDK_ROOT="${ANDROID_NDK_HOME:-}"
+          if [ -z "$NDK_ROOT" ] || [ ! -d "$NDK_ROOT" ]; then
+            NDK_ROOT="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          fi
+          test -x "$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          echo "root=$NDK_ROOT" >> "$GITHUB_OUTPUT"
+          echo "Using NDK: $NDK_ROOT"
+
+      - name: Build and strip native Android library
+        run: |
+          set -euxo pipefail
+          python3 tools/android/configure_android.py             --version us             --ndk "${{ steps.ndk.outputs.root }}"             --api 23
+          ninja -f build.android.ninja android-native
+          cat build/android/us/package/rom_audit.txt
+          rm -f roms/B8CE.gba
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+
+      - name: Assemble debug APK
+        working-directory: port/android
+        run: gradle --stacktrace :app:assembleDebug
+
+      - name: Verify APK inputs
+        run: |
+          test -f port/android/app/build/outputs/apk/debug/app-debug.apk
+          test -f build/android/us/package/jniLibs/armeabi-v7a/libkhcom.so
+          test -f build/android/us/package/assets/rommap.bin
+          test ! -f roms/B8CE.gba
+          unzip -l port/android/app/build/outputs/apk/debug/app-debug.apk | tee build/android/us/apk_contents.txt
+          ! unzip -l port/android/app/build/outputs/apk/debug/app-debug.apk | grep -Ei '\.gba$|B8CE\.gba'
+
+      - name: Upload Android build
+        uses: actions/upload-artifact@v4
+        with:
+          name: khcom-android-debug
+          path: |
+            port/android/app/build/outputs/apk/debug/app-debug.apk
+            build/android/us/package/rom_audit.txt
+            build/android/us/apk_contents.txt
+          if-no-files-found: error
+          retention-days: 7
