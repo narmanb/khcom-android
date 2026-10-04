@@ -33,9 +33,9 @@ jobs:
           fi
           test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
 
-          PLATFORM="$SDK/platforms/android-37"
+          PLATFORM="$SDK/platforms/android-36"
           if [ ! -f "$PLATFORM/android.jar" ]; then
-            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37"
+            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
           fi
 
           BUILD_TOOLS="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
