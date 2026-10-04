@@ -154,7 +154,7 @@ jobs:
           if [ -n "${KHCOM_VERSION_NAME:-}" ]; then
             args+=(--version-name "$KHCOM_VERSION_NAME")
           fi
-          tools/android/build_android_from_rom.sh "${args[@]}"
+          bash tools/android/build_android_from_rom.sh "${args[@]}"
 
       - name: Upload verified Android build
         if: steps.private_inputs.outputs.available == 'true'
