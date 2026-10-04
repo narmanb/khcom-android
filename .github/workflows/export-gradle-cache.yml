@@ -24,7 +24,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Resolve Android Gradle plugin
         working-directory: port/android
-        run: gradle --stacktrace :app:tasks
+        run: gradle --stacktrace :app:assembleDebug
       - name: Package Gradle cache
         run: |
           set -euxo pipefail
