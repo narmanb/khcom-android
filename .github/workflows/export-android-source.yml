@@ -1,0 +1,27 @@
+name: Export Android Port Source
+
+on:
+  push:
+    branches: [android-port]
+    paths:
+      - '.github/workflows/export-android-source.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: android-port
+          submodules: false
+      - name: Package source tree
+        run: |
+          git rev-parse HEAD > SOURCE_COMMIT.txt
+          tar --exclude=.git -czf /tmp/khcom-android-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: khcom-android-source
+          path: /tmp/khcom-android-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
