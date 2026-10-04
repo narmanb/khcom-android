@@ -295,7 +295,7 @@ void HandleSoraCardInput() {
         }
     }
 
-    if (GetKeysPressed() & A_BUTTON) {
+    if ((GetKeysPressed() & A_BUTTON) && IsSoraReloadCardSelected() == 0) {
         RequestSoraCardUse();
 
         if (GetSoraCardListIndex() == 3) {
@@ -521,7 +521,7 @@ void HandleTutorialCardInput() {
     }
 
     if (!(gBtlWork->flags & BTL_FLAG_TUTORIAL_NO_CARD_USE)) {
-        if (pressed & A_BUTTON) {
+        if ((pressed & A_BUTTON) && IsSoraReloadCardSelected() == 0) {
             RequestSoraCardUse();
         }
     }
