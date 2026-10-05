@@ -933,3 +933,33 @@ The best near-term technical move after gameplay stability is confirmed is:
 6. Port controller QoL and overlays after the graphics foundation is stable.
 
 The current Android PPU already containing the Vita widescreen renderer substantially lowers the expected difficulty of true widescreen compared with starting from the current Java Canvas behavior alone.
+
+
+# 16. Long-term HD replacement layer roadmap
+
+User priority: keep an optional **HD replacement layer for character art** on the roadmap, even if backgrounds remain original.
+
+The preferred architecture is **not** to overwrite the original GBA assets. The game should continue using its original graphics/data internally for logic, animation timing, collision, sequencing and compatibility, while the Android renderer can substitute higher-resolution art for selected recognized assets.
+
+Initial scope should focus on:
+- Sora character sprites
+- Riku character sprites
+- enemy/boss sprites
+- attack/effect sprites where practical
+- optionally portraits/HUD later
+
+Background replacement is explicitly **not required** for the first HD-pack implementation.
+
+Preferred design:
+1. Extract and catalog original character sprite/animation assets from the ROM/decomp.
+2. Give each replaceable asset or animation frame a stable identifier based on source metadata (ROM/source address, graphics definition, animation/frame ID, or another deterministic key), not framebuffer image matching.
+3. Keep original assets loaded for game logic and fallback rendering.
+4. Let the Android/OpenGL renderer look up an optional HD replacement for the current sprite/frame.
+5. Draw replacement textures at the same logical game position, respecting flip, affine transform, layering, visibility, animation timing and transparency.
+6. Fall back to the original sprite whenever no HD replacement exists.
+7. Keep the feature optional: Original Assets / HD Pack.
+8. Prefer an external resource-pack format so the APK does not need to redistribute copyrighted game artwork.
+
+The OpenGL migration, semantic scene/UI masking, widescreen work and multi-pass renderer should be designed so they do not block this future replacement system.
+
+When this roadmap item is started, first research the decomp's sprite/animation data structures and extraction tooling, then produce organized reference sheets of the original character frames for redrawing.
